@@ -1,0 +1,1042 @@
+// =============================================================================
+// SMARTGYM · Prisma Schema
+// PostgreSQL · Node.js / Express
+// Cod&Tics · 2025
+// =============================================================================
+// Mapeo 1:1 contra smartgym_migration.sql
+// Convención: modelos en PascalCase, campos en camelCase, tablas en snake_case
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+// =============================================================================
+// CODAN CORE · MÓDULO EMPRESAS
+// =============================================================================
+
+model Empresa {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre          String    @unique @db.VarChar(150)
+  slug            String    @unique @db.VarChar(60)
+  cuit            String    @unique @db.VarChar(20)
+  razonSocial     String    @map("razon_social") @db.VarChar(200)
+  nombreComercial String?   @map("nombre_comercial") @db.VarChar(150)
+  slogan          String?   @db.VarChar(200)
+  logoUrl         String?   @map("logo_url") @db.VarChar(500)
+  logoDarkUrl     String?   @map("logo_dark_url") @db.VarChar(500)
+  fondoLoginUrl   String?   @map("fondo_login_url") @db.VarChar(500)
+  marcaAguaTexto  String?   @map("marca_agua_texto") @db.VarChar(100)
+  marcaAguaUrl    String?   @map("marca_agua_url") @db.VarChar(500)
+  colorPrimario   String?   @map("color_primario") @db.VarChar(7)
+  colorSecundario String?   @map("color_secundario") @db.VarChar(7)
+  direccion       String?   @db.VarChar(200)
+  telefono        String?   @db.VarChar(50)
+  email           String?   @db.VarChar(150)
+  sitioWeb        String?   @map("sitio_web") @db.VarChar(200)
+  instagram       String?   @db.VarChar(100)
+  facebook        String?   @db.VarChar(100)
+  activo          Boolean   @default(true)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relaciones
+  sucursales       Sucursal[]
+  personas         Persona[]
+  usuarios         Usuario[]
+  roles            Rol[]
+  tipoRolesPersona TipoRolPersona[]
+  disciplinas      Disciplina[]
+  planes           Plan[]
+  categorias       CategoriaProducto[]
+  marcas           Marca[]
+  productos        Producto[]
+  proveedores      Proveedor[]
+  ventas           Venta[]
+  facturas         Factura[]
+  mediosPago       MedioPago[]
+  clases           Clase[]
+  ejercicios       Ejercicio[]
+  rutinas          Rutina[]
+
+  @@map("empresas")
+}
+
+model Sucursal {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String    @map("empresa_id") @db.Uuid
+  nombre    String    @db.VarChar(100)
+  direccion String?
+  ciudad    String?   @db.VarChar(80)
+  provincia String?   @db.VarChar(80)
+  telefono  String?   @db.VarChar(30)
+  email     String?   @db.VarChar(120)
+  activo    Boolean   @default(true)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relaciones
+  empresa       Empresa           @relation(fields: [empresaId], references: [id])
+  personaRoles  PersonaRol[]
+  usuarioRoles  UsuarioRol[]
+  clases        Clase[]
+  inscripciones Inscripcion[]
+  asistencias   Asistencia[]
+  inventario    Inventario[]
+  movimientos   MovimientoStock[]
+  ventas        Venta[]
+  puntosVenta   PuntoVenta[]
+  horariosClase HorarioClase[]
+
+  @@index([empresaId])
+  @@map("sucursales")
+}
+
+// =============================================================================
+// CODAN CORE · MÓDULO PERSONAS
+// =============================================================================
+
+model Persona {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  nombres         String    @db.VarChar(100)
+  apellidos       String    @db.VarChar(100)
+  fechaNacimiento DateTime? @map("fecha_nacimiento") @db.Date
+  genero          String?
+  fotoUrl         String?   @map("foto_url")
+  razonSocial     String?   @map("razon_social") @db.VarChar(200)
+  cuitFacturacion String?   @map("cuit_facturacion") @db.VarChar(20)
+  condicionIva    String?   @map("condicion_iva") @db.VarChar(30)
+  qrCode          String?   @unique @map("qr_code") @db.VarChar(100)
+  activo          Boolean   @default(true)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relaciones
+  empresa     Empresa            @relation(fields: [empresaId], references: [id])
+  documentos  PersonaDocumento[]
+  contactos   PersonaContacto[]
+  direcciones PersonaDireccion[]
+  usuario     Usuario?
+  roles       PersonaRol[]
+  ventas      Venta[]
+  facturas    Factura[]
+
+  @@index([empresaId])
+  @@index([empresaId, apellidos, nombres])
+  @@map("personas")
+}
+
+model PersonaDocumento {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId   String    @map("persona_id") @db.Uuid
+  tipo        String
+  numero      String    @db.VarChar(30)
+  vencimiento DateTime? @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  persona Persona @relation(fields: [personaId], references: [id])
+
+  @@unique([personaId, tipo, numero])
+  @@index([personaId])
+  @@map("persona_documentos")
+}
+
+model PersonaContacto {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId String   @map("persona_id") @db.Uuid
+  tipo      String
+  valor     String   @db.VarChar(150)
+  principal Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  persona Persona @relation(fields: [personaId], references: [id])
+
+  @@index([personaId])
+  @@map("persona_contactos")
+}
+
+model PersonaDireccion {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId    String   @map("persona_id") @db.Uuid
+  calle        String   @db.VarChar(150)
+  numero       String?  @db.VarChar(10)
+  piso         String?  @db.VarChar(10)
+  ciudad       String   @db.VarChar(80)
+  provincia    String   @db.VarChar(80)
+  codigoPostal String?  @map("codigo_postal") @db.VarChar(10)
+  principal    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  persona Persona @relation(fields: [personaId], references: [id])
+
+  @@index([personaId])
+  @@map("persona_direcciones")
+}
+
+// =============================================================================
+// CODAN CORE · MÓDULO SEGURIDAD
+// =============================================================================
+
+model Usuario {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId    String    @map("empresa_id") @db.Uuid
+  personaId    String?   @unique @map("persona_id") @db.Uuid
+  email        String    @unique @db.VarChar(150)
+  passwordHash String    @map("password_hash")
+  ultimoLogin  DateTime? @map("ultimo_login") @db.Timestamptz()
+  activo       Boolean   @default(true)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relaciones
+  empresa     Empresa           @relation(fields: [empresaId], references: [id])
+  persona     Persona?          @relation(fields: [personaId], references: [id])
+  roles       UsuarioRol[]
+  ventas      Venta[]
+  pagos       Pago[]
+  movimientos MovimientoStock[]
+
+  @@index([empresaId])
+  @@map("usuarios")
+}
+
+model Rol {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String? @map("empresa_id") @db.Uuid
+  nombre      String  @db.VarChar(60)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  empresa  Empresa?     @relation(fields: [empresaId], references: [id])
+  permisos RolPermiso[]
+  usuarios UsuarioRol[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("roles")
+}
+
+model Permiso {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo      String  @unique @db.VarChar(80)
+  descripcion String?
+  modulo      String  @db.VarChar(40)
+
+  roles RolPermiso[]
+
+  @@index([modulo])
+  @@map("permisos")
+}
+
+model RolPermiso {
+  rolId     String   @map("rol_id") @db.Uuid
+  permisoId String   @map("permiso_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  rol     Rol     @relation(fields: [rolId], references: [id])
+  permiso Permiso @relation(fields: [permisoId], references: [id])
+
+  @@id([rolId, permisoId])
+  @@index([permisoId])
+  @@map("rol_permisos")
+}
+
+model UsuarioRol {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId  String    @map("usuario_id") @db.Uuid
+  rolId      String    @map("rol_id") @db.Uuid
+  sucursalId String?   @map("sucursal_id") @db.Uuid
+  fechaDesde DateTime  @map("fecha_desde") @db.Date
+  fechaHasta DateTime? @map("fecha_hasta") @db.Date
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  usuario  Usuario   @relation(fields: [usuarioId], references: [id])
+  rol      Rol       @relation(fields: [rolId], references: [id])
+  sucursal Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([usuarioId])
+  @@map("usuario_roles")
+}
+
+// =============================================================================
+// CODAN CORE · AUDITORÍA
+// =============================================================================
+
+model Auditoria {
+  id           BigInt   @id @default(autoincrement())
+  empresaId    String   @map("empresa_id") @db.Uuid
+  usuarioId    String?  @map("usuario_id") @db.Uuid
+  tabla        String   @db.VarChar(60)
+  operacion    String
+  registroId   String   @map("registro_id")
+  datosAntes   Json?    @map("datos_antes")
+  datosDespues Json?    @map("datos_despues")
+  ip           String?
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([empresaId, tabla, createdAt(sort: Desc)])
+  @@index([tabla, registroId])
+  @@map("auditoria")
+}
+
+// =============================================================================
+// SMARTGYM · MÓDULO SOCIOS Y ROLES
+// =============================================================================
+
+model TipoRolPersona {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String  @map("empresa_id") @db.Uuid
+  nombre      String  @db.VarChar(40)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  empresa      Empresa      @relation(fields: [empresaId], references: [id])
+  personaRoles PersonaRol[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("tipo_roles_persona")
+}
+
+model PersonaRol {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaId     String    @map("persona_id") @db.Uuid
+  tipoRolId     String    @map("tipo_rol_id") @db.Uuid
+  sucursalId    String?   @map("sucursal_id") @db.Uuid
+  numeroSocio   String?   @map("numero_socio") @db.VarChar(20)
+  fechaAlta     DateTime  @map("fecha_alta") @db.Date
+  fechaBaja     DateTime? @map("fecha_baja") @db.Date
+  observaciones String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relaciones
+  persona               Persona              @relation(fields: [personaId], references: [id])
+  tipoRol               TipoRolPersona       @relation(fields: [tipoRolId], references: [id])
+  sucursal              Sucursal?            @relation(fields: [sucursalId], references: [id])
+  profesorDisciplinas   ProfesorDisciplina[]
+  inscripciones         Inscripcion[]
+  certificados          CertificadoMedico[]
+  horariosProfesor      Horario[]
+  rutinas               SocioRutina[]        @relation("SocioRutinas")
+  asistencias           Asistencia[]
+  mediciones            MedicionCorporal[]
+  registrosEntrenamiento RegistroEntrenamiento[]
+  rutinasProfesor       SocioRutina[]        @relation("ProfesorRutinas")
+  horariosClaseProfesor HorarioClase[]       @relation("ProfesorHorarios")
+  inscripcionesClase    InscripcionClase[]   @relation("SocioInscripcionesClase")
+
+  @@unique([personaId, tipoRolId, sucursalId])
+  @@index([personaId])
+  @@index([tipoRolId])
+  @@map("persona_roles")
+}
+
+// =============================================================================
+// SMARTGYM · MÓDULO DISCIPLINAS
+// =============================================================================
+
+model Disciplina {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String    @map("empresa_id") @db.Uuid
+  nombre      String    @db.VarChar(80)
+  descripcion String?
+  colorHex    String?   @map("color_hex") @db.VarChar(7)
+  icono       String?   @db.VarChar(50)
+  activo      Boolean   @default(true)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  empresa    Empresa              @relation(fields: [empresaId], references: [id])
+  profesores ProfesorDisciplina[]
+  planes     PlanDisciplina[]
+  clases     Clase[]
+  horarios   HorarioClase[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("disciplinas")
+}
+
+model ProfesorDisciplina {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaRolId String   @map("persona_rol_id") @db.Uuid
+  disciplinaId String   @map("disciplina_id") @db.Uuid
+  nivel        String?
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  personaRol PersonaRol @relation(fields: [personaRolId], references: [id])
+  disciplina Disciplina @relation(fields: [disciplinaId], references: [id])
+
+  @@unique([personaRolId, disciplinaId])
+  @@index([disciplinaId])
+  @@map("profesor_disciplinas")
+}
+
+// =============================================================================
+// SMARTGYM · MÓDULO MEMBRESÍAS
+// =============================================================================
+
+model Plan {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId             String    @map("empresa_id") @db.Uuid
+  nombre                String    @db.VarChar(100)
+  descripcion           String?
+  precio                Decimal   @db.Decimal(12, 2)
+  duracionDias          Int       @map("duracion_dias")
+  tipo                  String
+  accesoTodasSucursales Boolean   @default(false) @map("acceso_todas_sucursales")
+  cantidadClases        Int?      @map("cantidad_clases")
+  activo                Boolean   @default(true)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa       Empresa          @relation(fields: [empresaId], references: [id])
+  disciplinas   PlanDisciplina[]
+  inscripciones Inscripcion[]
+
+  @@index([empresaId])
+  @@map("planes")
+}
+
+model PlanDisciplina {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId       String   @map("plan_id") @db.Uuid
+  disciplinaId String   @map("disciplina_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  plan       Plan       @relation(fields: [planId], references: [id])
+  disciplina Disciplina @relation(fields: [disciplinaId], references: [id])
+
+  @@unique([planId, disciplinaId])
+  @@index([disciplinaId])
+  @@map("plan_disciplinas")
+}
+
+model Inscripcion {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaRolId  String   @map("persona_rol_id") @db.Uuid
+  planId        String   @map("plan_id") @db.Uuid
+  sucursalId    String   @map("sucursal_id") @db.Uuid
+  fechaInicio   DateTime @map("fecha_inicio") @db.Date
+  fechaFin      DateTime @map("fecha_fin") @db.Date
+  precioPagado  Decimal  @map("precio_pagado") @db.Decimal(12, 2)
+  estado        String   @default("PENDIENTE")
+  observaciones String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  personaRol  PersonaRol     @relation(fields: [personaRolId], references: [id])
+  plan        Plan           @relation(fields: [planId], references: [id])
+  sucursal    Sucursal       @relation(fields: [sucursalId], references: [id])
+  asistencias Asistencia[]
+  reservas    ReservaClase[]
+  pagos       Pago[]
+
+  @@index([personaRolId])
+  @@index([planId])
+  @@index([sucursalId])
+  @@map("inscripciones")
+}
+
+// =============================================================================
+// SMARTGYM · CERTIFICADOS MÉDICOS
+// =============================================================================
+
+model CertificadoMedico {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaRolId     String   @map("persona_rol_id") @db.Uuid
+  tipo             String
+  fechaEmision     DateTime @map("fecha_emision") @db.Date
+  fechaVencimiento DateTime @map("fecha_vencimiento") @db.Date
+  medicoNombre     String?  @map("medico_nombre") @db.VarChar(150)
+  matricula        String?  @db.VarChar(30)
+  archivoUrl       String?  @map("archivo_url")
+  estado           String   @default("VIGENTE")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  personaRol PersonaRol @relation(fields: [personaRolId], references: [id])
+
+  @@index([personaRolId])
+  @@index([fechaVencimiento])
+  @@map("certificados_medicos")
+}
+
+model MedicionCorporal {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaRolId  String   @map("persona_rol_id") @db.Uuid
+  fecha         DateTime @db.Date
+  peso          Decimal? @db.Decimal(5, 2) // kg, ej. 78.50
+  altura        Decimal? @db.Decimal(5, 2) // cm, ej. 175.00
+  observaciones String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  personaRol PersonaRol @relation(fields: [personaRolId], references: [id])
+
+  @@index([personaRolId])
+  @@map("mediciones_corporales")
+}
+
+model RegistroEntrenamiento {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaRolId  String   @map("persona_rol_id") @db.Uuid
+  ejercicioId   String   @map("ejercicio_id") @db.Uuid
+  fecha         DateTime @db.Date
+  peso          Decimal? @db.Decimal(6, 2) // kg utilizados
+  series        Int?
+  repeticiones  String?  // "10,10,9,8" o "10-12"
+  observaciones String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  personaRol PersonaRol @relation(fields: [personaRolId], references: [id])
+  ejercicio  Ejercicio  @relation(fields: [ejercicioId], references: [id])
+
+  @@index([personaRolId, ejercicioId])
+  @@map("registros_entrenamiento")
+}
+
+// =============================================================================
+// SMARTGYM · CLASES Y HORARIOS
+// =============================================================================
+
+model Clase {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId    String    @map("empresa_id") @db.Uuid
+  sucursalId   String    @map("sucursal_id") @db.Uuid
+  disciplinaId String    @map("disciplina_id") @db.Uuid
+  nombre       String    @db.VarChar(100)
+  descripcion  String?
+  cupoMaximo   Int       @map("cupo_maximo")
+  activo       Boolean   @default(true)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  empresa    Empresa    @relation(fields: [empresaId], references: [id])
+  sucursal   Sucursal   @relation(fields: [sucursalId], references: [id])
+  disciplina Disciplina @relation(fields: [disciplinaId], references: [id])
+  horarios   Horario[]
+
+  @@index([sucursalId])
+  @@index([disciplinaId])
+  @@map("clases")
+}
+
+model Horario {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  claseId       String   @map("clase_id") @db.Uuid
+  profesorRolId String?  @map("profesor_rol_id") @db.Uuid
+  diaSemana     Int      @map("dia_semana") @db.SmallInt
+  horaInicio    DateTime @map("hora_inicio") @db.Time()
+  horaFin       DateTime @map("hora_fin") @db.Time()
+  activo        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  clase       Clase          @relation(fields: [claseId], references: [id])
+  profesorRol PersonaRol?    @relation(fields: [profesorRolId], references: [id])
+  reservas    ReservaClase[]
+
+  @@index([claseId])
+  @@index([diaSemana, horaInicio])
+  @@map("horarios")
+}
+
+model ReservaClase {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  horarioId     String   @map("horario_id") @db.Uuid
+  inscripcionId String   @map("inscripcion_id") @db.Uuid
+  fecha         DateTime @db.Date
+  estado        String   @default("RESERVADA")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  horario     Horario     @relation(fields: [horarioId], references: [id])
+  inscripcion Inscripcion @relation(fields: [inscripcionId], references: [id])
+
+  @@unique([horarioId, inscripcionId, fecha])
+  @@index([inscripcionId])
+  @@index([fecha, horarioId])
+  @@map("reservas_clases")
+}
+
+// =============================================================================
+// SMARTGYM · ASISTENCIAS
+// =============================================================================
+
+model Asistencia {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inscripcionId    String?   @map("inscripcion_id") @db.Uuid
+  personaRolId     String?   @map("persona_rol_id") @db.Uuid
+  sucursalId       String    @map("sucursal_id") @db.Uuid
+  fechaHoraIngreso DateTime  @default(now()) @map("fecha_hora_ingreso") @db.Timestamptz()
+  fechaHoraEgreso  DateTime? @map("fecha_hora_egreso") @db.Timestamptz()
+  metodoRegistro   String    @default("MANUAL") @map("metodo_registro")
+  dispositivoId    String?   @map("dispositivo_id") @db.VarChar(60)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  inscripcion Inscripcion? @relation(fields: [inscripcionId], references: [id])
+  personaRol  PersonaRol?  @relation(fields: [personaRolId], references: [id])
+  sucursal    Sucursal     @relation(fields: [sucursalId], references: [id])
+
+  @@index([inscripcionId])
+  @@index([personaRolId])
+  @@index([sucursalId, fechaHoraIngreso(sort: Desc)])
+  @@map("asistencias")
+}
+
+// =============================================================================
+// SMARTGYM · RUTINAS
+// =============================================================================
+
+model GrupoMuscular {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre      String  @unique @db.VarChar(60)
+  descripcion String?
+
+  ejercicios Ejercicio[]
+
+  @@map("grupos_musculares")
+}
+
+model Ejercicio {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String?  @map("empresa_id") @db.Uuid
+  nombre          String   @db.VarChar(100)
+  descripcion     String?
+  imagenUrl       String?  @map("imagen_url")
+  videoUrl        String?  @map("video_url")
+  grupoMuscularId String?  @map("grupo_muscular_id") @db.Uuid
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  grupoMuscular GrupoMuscular?    @relation(fields: [grupoMuscularId], references: [id])
+  rutinas       RutinaEjercicio[]
+  registros     RegistroEntrenamiento[]
+  Empresa       Empresa?          @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId])
+  @@index([grupoMuscularId])
+  @@map("ejercicios")
+}
+
+model Rutina {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String?  @map("empresa_id") @db.Uuid
+  nombre          String   @db.VarChar(100)
+  descripcion     String?
+  duracionSemanas Int?     @map("duracion_semanas")
+  nivel           String?
+  tokenPublico    String   @unique @default(cuid()) @map("token_publico")
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  ejercicios RutinaEjercicio[]
+  socios     SocioRutina[]
+  Empresa    Empresa?          @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId])
+  @@map("rutinas")
+}
+
+model RutinaEjercicio {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rutinaId      String  @map("rutina_id") @db.Uuid
+  ejercicioId   String  @map("ejercicio_id") @db.Uuid
+  diaNumero     Int     @map("dia_numero") @db.SmallInt
+  orden         Int     @db.SmallInt
+  series        Int     @db.SmallInt
+  repeticiones  String  @db.VarChar(20)
+  descanseSeg   Int?    @map("descanso_seg")
+  observaciones String?
+
+  rutina    Rutina    @relation(fields: [rutinaId], references: [id])
+  ejercicio Ejercicio @relation(fields: [ejercicioId], references: [id])
+
+  @@unique([rutinaId, diaNumero, orden])
+  @@index([rutinaId])
+  @@index([ejercicioId])
+  @@map("rutina_ejercicios")
+}
+
+model SocioRutina {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  personaRolId  String    @map("persona_rol_id") @db.Uuid
+  rutinaId      String    @map("rutina_id") @db.Uuid
+  profesorRolId String?   @map("profesor_rol_id") @db.Uuid
+  fechaInicio   DateTime  @map("fecha_inicio") @db.Date
+  fechaFin      DateTime? @map("fecha_fin") @db.Date
+  activo        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  personaRol  PersonaRol  @relation("SocioRutinas", fields: [personaRolId], references: [id])
+  rutina      Rutina      @relation(fields: [rutinaId], references: [id])
+  profesorRol PersonaRol? @relation("ProfesorRutinas", fields: [profesorRolId], references: [id])
+
+  @@index([personaRolId])
+  @@map("socio_rutinas")
+}
+
+// =============================================================================
+// SMARTGYM · INVENTARIO
+// =============================================================================
+
+model CategoriaProducto {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String  @map("empresa_id") @db.Uuid
+  nombre      String  @db.VarChar(80)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  empresa   Empresa    @relation(fields: [empresaId], references: [id])
+  productos Producto[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("categorias_productos")
+}
+
+model Marca {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String  @map("empresa_id") @db.Uuid
+  nombre    String  @db.VarChar(80)
+  activo    Boolean @default(true)
+
+  empresa   Empresa    @relation(fields: [empresaId], references: [id])
+  productos Producto[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("marcas")
+}
+
+model Proveedor {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String    @map("empresa_id") @db.Uuid
+  nombre      String    @db.VarChar(150)
+  razonSocial String?   @map("razon_social") @db.VarChar(200)
+  cuit        String?   @db.VarChar(20)
+  telefono    String?   @db.VarChar(50)
+  email       String?   @db.VarChar(150)
+  direccion   String?   @db.VarChar(200)
+  notas       String?
+  activo      Boolean   @default(true)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa     Empresa           @relation(fields: [empresaId], references: [id])
+  productos   Producto[]
+  movimientos MovimientoStock[]
+
+  @@map("proveedores")
+}
+
+model HorarioClase {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  disciplinaId  String   @map("disciplina_id") @db.Uuid
+  sucursalId    String   @map("sucursal_id") @db.Uuid
+  profesorRolId String?  @map("profesor_rol_id") @db.Uuid
+  diaSemana     Int      @map("dia_semana") @db.SmallInt
+  horaInicio    DateTime @map("hora_inicio") @db.Time
+  horaFin       DateTime @map("hora_fin") @db.Time
+  cupoMax       Int?     @map("cupo_max") @db.SmallInt
+  nombre        String?  @db.VarChar(100)
+  activo        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  disciplina    Disciplina         @relation(fields: [disciplinaId], references: [id])
+  sucursal      Sucursal           @relation(fields: [sucursalId], references: [id])
+  profesorRol   PersonaRol?        @relation("ProfesorHorarios", fields: [profesorRolId], references: [id])
+  inscripciones InscripcionClase[]
+
+  @@index([empresaId])
+  @@index([disciplinaId])
+  @@index([diaSemana])
+  @@map("horarios_disciplina")
+}
+
+model InscripcionClase {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  horarioId    String    @map("horario_id") @db.Uuid
+  personaRolId String    @map("persona_rol_id") @db.Uuid
+  fechaAlta    DateTime  @default(now()) @map("fecha_alta") @db.Date
+  fechaBaja    DateTime? @map("fecha_baja") @db.Date
+  activo       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  horario    HorarioClase @relation(fields: [horarioId], references: [id])
+  personaRol PersonaRol   @relation("SocioInscripcionesClase", fields: [personaRolId], references: [id])
+
+  @@unique([horarioId, personaRolId])
+  @@index([horarioId])
+  @@index([personaRolId])
+  @@map("inscripciones_clase")
+}
+
+model Producto {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId   String    @map("empresa_id") @db.Uuid
+  categoriaId String    @map("categoria_id") @db.Uuid
+  marcaId     String?   @map("marca_id") @db.Uuid
+  nombre      String    @db.VarChar(150)
+  descripcion String?
+  codigo      String?   @db.VarChar(50)
+  precioVenta Decimal   @map("precio_venta") @db.Decimal(12, 2)
+  precioCosto Decimal?  @map("precio_costo") @db.Decimal(12, 2)
+  imagenUrl   String?   @map("imagen_url")
+  proveedorId String?   @map("proveedor_id") @db.Uuid
+  activo      Boolean   @default(true)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa     Empresa            @relation(fields: [empresaId], references: [id])
+  categoria   CategoriaProducto  @relation(fields: [categoriaId], references: [id])
+  marca       Marca?             @relation(fields: [marcaId], references: [id])
+  proveedor   Proveedor?         @relation(fields: [proveedorId], references: [id])
+  variantes   ProductoVariante[]
+  inventario  Inventario[]
+  movimientos MovimientoStock[]
+  detalles    DetalleVenta[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId])
+  @@index([categoriaId])
+  @@map("productos")
+}
+
+model ProductoVariante {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productoId        String  @map("producto_id") @db.Uuid
+  nombre            String  @db.VarChar(60)
+  valor             String  @db.VarChar(60)
+  precioDiferencial Decimal @default(0) @map("precio_diferencial") @db.Decimal(12, 2)
+  activo            Boolean @default(true)
+
+  producto    Producto          @relation(fields: [productoId], references: [id])
+  inventario  Inventario[]
+  movimientos MovimientoStock[]
+  detalles    DetalleVenta[]
+
+  @@unique([productoId, nombre, valor])
+  @@index([productoId])
+  @@map("producto_variantes")
+}
+
+model Inventario {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sucursalId  String   @map("sucursal_id") @db.Uuid
+  productoId  String   @map("producto_id") @db.Uuid
+  varianteId  String?  @map("variante_id") @db.Uuid
+  stockActual Decimal  @default(0) @map("stock_actual") @db.Decimal(12, 3)
+  stockMinimo Decimal  @default(0) @map("stock_minimo") @db.Decimal(12, 3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  sucursal Sucursal          @relation(fields: [sucursalId], references: [id])
+  producto Producto          @relation(fields: [productoId], references: [id])
+  variante ProductoVariante? @relation(fields: [varianteId], references: [id])
+
+  @@unique([sucursalId, productoId, varianteId])
+  @@index([sucursalId])
+  @@index([productoId])
+  @@map("inventario")
+}
+
+model MovimientoStock {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sucursalId   String   @map("sucursal_id") @db.Uuid
+  productoId   String   @map("producto_id") @db.Uuid
+  varianteId   String?  @map("variante_id") @db.Uuid
+  tipo         String
+  cantidad     Decimal  @db.Decimal(12, 3)
+  motivo       String?
+  referenciaId String?  @map("referencia_id") @db.Uuid
+  usuarioId    String   @map("usuario_id") @db.Uuid
+  proveedorId  String?  @map("proveedor_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  sucursal  Sucursal          @relation(fields: [sucursalId], references: [id])
+  producto  Producto          @relation(fields: [productoId], references: [id])
+  variante  ProductoVariante? @relation(fields: [varianteId], references: [id])
+  usuario   Usuario           @relation(fields: [usuarioId], references: [id])
+  proveedor Proveedor?        @relation(fields: [proveedorId], references: [id])
+
+  @@index([sucursalId, createdAt(sort: Desc)])
+  @@index([productoId])
+  @@map("movimientos_stock")
+}
+
+// =============================================================================
+// SMARTGYM · VENTAS
+// =============================================================================
+
+model Venta {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  sucursalId    String   @map("sucursal_id") @db.Uuid
+  personaId     String?  @map("persona_id") @db.Uuid
+  usuarioId     String   @map("usuario_id") @db.Uuid
+  fecha         DateTime @default(now()) @db.Timestamptz()
+  subtotal      Decimal  @db.Decimal(12, 2)
+  descuento     Decimal  @default(0) @db.Decimal(12, 2)
+  total         Decimal  @db.Decimal(12, 2)
+  estado        String   @default("PENDIENTE")
+  observaciones String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa  Empresa        @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal       @relation(fields: [sucursalId], references: [id])
+  persona  Persona?       @relation(fields: [personaId], references: [id])
+  usuario  Usuario        @relation(fields: [usuarioId], references: [id])
+  detalles DetalleVenta[]
+  pagos    Pago[]
+  factura  Factura?
+
+  @@index([empresaId, fecha(sort: Desc)])
+  @@index([sucursalId, fecha(sort: Desc)])
+  @@index([personaId])
+  @@map("ventas")
+}
+
+model DetalleVenta {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ventaId        String  @map("venta_id") @db.Uuid
+  productoId     String? @map("producto_id") @db.Uuid
+  varianteId     String? @map("variante_id") @db.Uuid
+  descripcion    String  @db.VarChar(150)
+  cantidad       Decimal @db.Decimal(12, 3)
+  precioUnitario Decimal @map("precio_unitario") @db.Decimal(12, 2)
+  descuento      Decimal @default(0) @db.Decimal(12, 2)
+  subtotal       Decimal @db.Decimal(12, 2)
+
+  venta    Venta             @relation(fields: [ventaId], references: [id])
+  producto Producto?         @relation(fields: [productoId], references: [id])
+  variante ProductoVariante? @relation(fields: [varianteId], references: [id])
+
+  @@index([ventaId])
+  @@map("detalle_ventas")
+}
+
+// =============================================================================
+// SMARTGYM · PAGOS
+// =============================================================================
+
+model MedioPago {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId String  @map("empresa_id") @db.Uuid
+  nombre    String  @db.VarChar(60)
+  tipo      String
+  activo    Boolean @default(true)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+  pagos   Pago[]
+
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("medios_pago")
+}
+
+model Pago {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ventaId           String?  @map("venta_id") @db.Uuid
+  inscripcionId     String?  @map("inscripcion_id") @db.Uuid
+  medioPagoId       String   @map("medio_pago_id") @db.Uuid
+  monto             Decimal  @db.Decimal(12, 2)
+  fecha             DateTime @default(now()) @db.Timestamptz()
+  referenciaExterna String?  @map("referencia_externa") @db.VarChar(100)
+  estado            String   @default("PENDIENTE")
+  usuarioId         String   @map("usuario_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  venta       Venta?       @relation(fields: [ventaId], references: [id])
+  inscripcion Inscripcion? @relation(fields: [inscripcionId], references: [id])
+  medioPago   MedioPago    @relation(fields: [medioPagoId], references: [id])
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id])
+
+  @@index([ventaId])
+  @@index([inscripcionId])
+  @@index([fecha(sort: Desc)])
+  @@map("pagos")
+}
+
+// =============================================================================
+// SMARTGYM · FACTURACIÓN ARCA/AFIP
+// =============================================================================
+
+model PuntoVenta {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sucursalId String  @map("sucursal_id") @db.Uuid
+  numero     Int     @db.SmallInt
+  tipo       String
+  activo     Boolean @default(true)
+
+  sucursal Sucursal  @relation(fields: [sucursalId], references: [id])
+  facturas Factura[]
+
+  @@unique([sucursalId, numero])
+  @@index([sucursalId])
+  @@map("puntos_venta")
+}
+
+model Factura {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  puntoVentaId    String    @map("punto_venta_id") @db.Uuid
+  tipoComprobante String    @map("tipo_comprobante")
+  numero          Int
+  fecha           DateTime  @db.Date
+  personaId       String?   @map("persona_id") @db.Uuid
+  ventaId         String?   @unique @map("venta_id") @db.Uuid
+  subtotal        Decimal   @db.Decimal(12, 2)
+  iva             Decimal   @default(0) @db.Decimal(12, 2)
+  total           Decimal   @db.Decimal(12, 2)
+  cae             String?   @db.VarChar(14)
+  caeVencimiento  DateTime? @map("cae_vencimiento") @db.Date
+  estado          String    @default("PENDIENTE")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  empresa    Empresa          @relation(fields: [empresaId], references: [id])
+  puntoVenta PuntoVenta       @relation(fields: [puntoVentaId], references: [id])
+  persona    Persona?         @relation(fields: [personaId], references: [id])
+  venta      Venta?           @relation(fields: [ventaId], references: [id])
+  detalles   DetalleFactura[]
+
+  @@unique([puntoVentaId, tipoComprobante, numero])
+  @@index([empresaId, fecha(sort: Desc)])
+  @@index([personaId])
+  @@map("facturas")
+}
+
+model DetalleFactura {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  facturaId      String  @map("factura_id") @db.Uuid
+  descripcion    String  @db.VarChar(150)
+  cantidad       Decimal @db.Decimal(12, 3)
+  precioUnitario Decimal @map("precio_unitario") @db.Decimal(12, 2)
+  alicuotaIva    Decimal @default(21.00) @map("alicuota_iva") @db.Decimal(5, 2)
+  subtotal       Decimal @db.Decimal(12, 2)
+
+  factura Factura @relation(fields: [facturaId], references: [id])
+
+  @@index([facturaId])
+  @@map("detalle_facturas")
+}

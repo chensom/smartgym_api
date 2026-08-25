@@ -1,0 +1,73 @@
+smartgym-api/
+├── src/
+│   ├── app.ts                        # Express app principal
+│   ├── server.ts                     # Entry point, listen
+│   ├── lib/
+│   │   ├── prisma.ts                 # Singleton Prisma Client
+│   │   └── logger.ts                 # Winston logger
+│   ├── config/
+│   │   └── env.ts                    # Variables de entorno validadas
+│   ├── middlewares/
+│   │   ├── auth.middleware.ts        # JWT verify + attach user
+│   │   ├── empresa.middleware.ts     # Attach empresa_id desde JWT
+│   │   ├── rbac.middleware.ts        # Verificar permiso requerido
+│   │   ├── validate.middleware.ts    # Zod schema validation
+│   │   ├── auditoria.middleware.ts   # Log automático de operaciones
+│   │   └── error.middleware.ts       # Global error handler
+│   ├── routes/
+│   │   ├── index.ts                  # Router raíz /api/v1
+│   │   ├── auth.routes.ts
+│   │   ├── empresas.routes.ts
+│   │   ├── sucursales.routes.ts
+│   │   ├── personas.routes.ts
+│   │   ├── socios.routes.ts
+│   │   ├── disciplinas.routes.ts
+│   │   ├── planes.routes.ts
+│   │   ├── inscripciones.routes.ts
+│   │   ├── asistencias.routes.ts
+│   │   ├── clases.routes.ts
+│   │   ├── horarios.routes.ts
+│   │   ├── productos.routes.ts
+│   │   ├── inventario.routes.ts
+│   │   ├── ventas.routes.ts
+│   │   ├── pagos.routes.ts
+│   │   └── facturas.routes.ts
+│   ├── controllers/
+│   │   ├── auth.controller.ts
+│   │   ├── empresas.controller.ts
+│   │   ├── sucursales.controller.ts
+│   │   ├── personas.controller.ts
+│   │   ├── socios.controller.ts
+│   │   ├── disciplinas.controller.ts
+│   │   ├── planes.controller.ts
+│   │   ├── inscripciones.controller.ts
+│   │   ├── asistencias.controller.ts
+│   │   ├── clases.controller.ts
+│   │   ├── horarios.controller.ts
+│   │   ├── productos.controller.ts
+│   │   ├── inventario.controller.ts
+│   │   ├── ventas.controller.ts
+│   │   ├── pagos.controller.ts
+│   │   └── facturas.controller.ts
+│   ├── services/
+│   │   ├── auth.service.ts
+│   │   ├── socios.service.ts
+│   │   ├── inscripciones.service.ts
+│   │   ├── asistencias.service.ts
+│   │   ├── inventario.service.ts
+│   │   └── facturacion.service.ts
+│   ├── schemas/                      # Zod validators
+│   │   ├── auth.schema.ts
+│   │   ├── personas.schema.ts
+│   │   ├── inscripciones.schema.ts
+│   │   ├── ventas.schema.ts
+│   │   └── common.schema.ts
+│   └── types/
+│       ├── express.d.ts              # Extend Request con user/empresa
+│       └── api.types.ts              # Tipos de respuesta estándar
+├── prisma/
+│   └── schema.prisma
+├── .env
+├── .env.example
+├── package.json
+└── tsconfig.json
