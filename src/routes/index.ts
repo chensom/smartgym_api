@@ -21,6 +21,8 @@ import rutinasRoutes      from './rutinas.routes';
 import certificadosRoutes from './certificados.routes';
 import medicionesRoutes   from './mediciones.routes';
 import registrosRoutes    from './registros.routes';
+import gastosRoutes       from './gastos.routes';
+import cajaRoutes         from './caja.routes';
 
 const router = Router();
 
@@ -62,6 +64,8 @@ router.use('/rutinas',       rutinasRoutes);
 router.use('/certificados',  certificadosRoutes);
 router.use('/mediciones',    medicionesRoutes);
 router.use('/registros',     registrosRoutes);
+router.use('/gastos',        gastosRoutes);
+router.use('/caja',          cajaRoutes);
 
 // ── Sucursales ─────────────────────────────────────────────────────────────
 router.get('/sucursales', auth, rbac('socios.ver'), async (req: any, res, next) => {
@@ -134,6 +138,15 @@ router.patch('/planes/:id', auth, rbac('configuracion.editar'), async (req: any,
   } catch (e) { next(e); }
 });
 
+router.delete('/planes/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
+  try {
+    const existente = await prisma.plan.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Plan no encontrado')); return; }
+    await prisma.plan.delete({ where: { id: req.params.id } });
+    res.json(ok(null, 'Plan eliminado'));
+  } catch (e) { next(e); }
+});
+
 // ── Disciplinas ────────────────────────────────────────────────────────────
 router.get('/disciplinas', auth, rbac('socios.ver'), async (req: any, res, next) => {
   try {
@@ -169,6 +182,17 @@ router.post('/disciplinas', auth, rbac('configuracion.editar'), async (req: any,
       data: { empresaId: req.empresaId, nombre, descripcion: descripcion ?? null, colorHex: colorHex ?? '#534AB7', activo: true },
     });
     res.status(201).json(ok(disc, 'Disciplina creada'));
+  } catch (e) { next(e); }
+});
+
+router.delete('/disciplinas/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
+  try {
+    const existente = await prisma.disciplina.findFirst({
+      where: { id: req.params.id, empresaId: req.empresaId },
+    });
+    if (!existente) { res.status(404).json(err('Disciplina no encontrada')); return; }
+    await prisma.disciplina.delete({ where: { id: req.params.id } });
+    res.json(ok(null, 'Disciplina eliminada'));
   } catch (e) { next(e); }
 });
 
@@ -249,12 +273,37 @@ router.patch('/marcas/:id', auth, rbac('configuracion.editar'), async (req: any,
   } catch (e) { next(e); }
 });
 
+router.delete('/marcas/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
+  try {
+    const existente = await prisma.marca.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Marca no encontrada')); return; }
+    await prisma.marca.delete({ where: { id: req.params.id } });
+    res.json(ok(null, 'Marca eliminada'));
+  } catch (e) { next(e); }
+});
+
 router.post('/categorias', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
     const { nombre } = req.body;
     if (!nombre) { res.status(400).json(err('nombre requerido')); return; }
     const cat = await prisma.categoriaProducto.create({ data: { empresaId: req.empresaId, nombre } });
     res.status(201).json(ok(cat, 'Categoría creada'));
+  } catch (e) { next(e); }
+});
+
+router.patch('/categorias/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
+  try {
+    const cat = await prisma.categoriaProducto.update({ where: { id: req.params.id }, data: { nombre: req.body.nombre } });
+    res.json(ok(cat, 'Categoría actualizada'));
+  } catch (e) { next(e); }
+});
+
+router.delete('/categorias/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
+  try {
+    const existente = await prisma.categoriaProducto.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Categoría no encontrada')); return; }
+    await prisma.categoriaProducto.delete({ where: { id: req.params.id } });
+    res.json(ok(null, 'Categoría eliminada'));
   } catch (e) { next(e); }
 });
 
@@ -309,6 +358,15 @@ router.patch('/tipos-rol/:id', auth, rbac('configuracion.editar'), async (req: a
     if (e.code === 'P2002') { res.status(409).json(err('Ya existe un tipo de perfil con ese nombre')); return; }
     next(e);
   }
+});
+
+router.delete('/tipos-rol/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
+  try {
+    const existente = await prisma.tipoRolPersona.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Tipo de perfil no encontrado')); return; }
+    await prisma.tipoRolPersona.delete({ where: { id: req.params.id } });
+    res.json(ok(null, 'Tipo de perfil eliminado'));
+  } catch (e) { next(e); }
 });
 
 // ── Búsqueda por documento ──────────────────────────────────────────────────
