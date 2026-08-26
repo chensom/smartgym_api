@@ -69,6 +69,8 @@ model Empresa {
   clases           Clase[]
   ejercicios       Ejercicio[]
   rutinas          Rutina[]
+  gastos           Gasto[]
+  cierresCaja      CierreCaja[]
 
   @@map("empresas")
 }
@@ -99,6 +101,8 @@ model Sucursal {
   ventas        Venta[]
   puntosVenta   PuntoVenta[]
   horariosClase HorarioClase[]
+  gastos        Gasto[]
+  cierresCaja   CierreCaja[]
 
   @@index([empresaId])
   @@map("sucursales")
@@ -949,6 +953,7 @@ model MedioPago {
 
   empresa Empresa @relation(fields: [empresaId], references: [id])
   pagos   Pago[]
+  gastos  Gasto[]
 
   @@unique([empresaId, nombre])
   @@index([empresaId])
@@ -1039,4 +1044,53 @@ model DetalleFactura {
 
   @@index([facturaId])
   @@map("detalle_facturas")
+}
+
+// =============================================================================
+// SMARTGYM · GASTOS
+// =============================================================================
+
+model Gasto {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId      String   @map("empresa_id") @db.Uuid
+  sucursalId     String?  @map("sucursal_id") @db.Uuid
+  tipo           String   // FIJO | VARIABLE
+  categoria      String   @db.VarChar(60)
+  descripcion    String?
+  monto          Decimal  @db.Decimal(12, 2)
+  fecha          DateTime @db.Date
+  medioPagoId    String?  @map("medio_pago_id") @db.Uuid
+  comprobanteUrl String?  @map("comprobante_url")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  empresa   Empresa    @relation(fields: [empresaId], references: [id])
+  sucursal  Sucursal?  @relation(fields: [sucursalId], references: [id])
+  medioPago MedioPago? @relation(fields: [medioPagoId], references: [id])
+
+  @@index([empresaId, fecha(sort: Desc)])
+  @@index([empresaId, tipo])
+  @@map("gastos")
+}
+
+// =============================================================================
+// SMARTGYM · CIERRE DE CAJA
+// =============================================================================
+
+model CierreCaja {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  sucursalId    String   @map("sucursal_id") @db.Uuid
+  fecha         DateTime @db.Date
+  montoInicial  Decimal  @default(0) @map("monto_inicial") @db.Decimal(12, 2)
+  montoContado  Decimal? @map("monto_contado") @db.Decimal(12, 2)
+  observaciones String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+
+  @@unique([sucursalId, fecha])
+  @@index([empresaId, fecha(sort: Desc)])
+  @@map("cierres_caja")
 }

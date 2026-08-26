@@ -11,6 +11,14 @@ export const errorHandler = (
 ): void => {
   logger.error(error.message, { stack: error.stack, url: req.url, method: req.method });
 
+  // findFirstOrThrow / findUniqueOrThrow tiran esta clase específica cuando no
+  // encuentran nada — es un 404 normal, no un error interno. Sin este chequeo,
+  // caía en el catch-all de abajo y se reportaba como 500 (incluso a Sentry).
+  if (error.name === 'NotFoundError') {
+    res.status(404).json({ ok: false, error: 'Registro no encontrado' });
+    return;
+  }
+
   // Errores de Prisma — traducir a mensajes útiles
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     switch (error.code) {

@@ -13,54 +13,55 @@ async function main() {
   console.log('\n🌱 Iniciando seed SMARTGYM...\n');
 
   // ── 1. EMPRESA ─────────────────────────────────────────────────────────────
-  const empresa = await prisma.empresas.upsert({
+  const empresa = await prisma.empresa.upsert({
     where:  { cuit: '30-71234567-0' },
     update: {},
     create: {
-      nombre:       'Gym Demo S.R.L.',
-      cuit:         '30-71234567-0',
-      razon_social: 'Gym Demo S.R.L.',
-      activo:       true,
+      nombre:      'Gym Demo S.R.L.',
+      slug:        'gym-demo',
+      cuit:        '30-71234567-0',
+      razonSocial: 'Gym Demo S.R.L.',
+      activo:      true,
     },
   });
   console.log(`✅ Empresa: ${empresa.nombre} (${empresa.id})`);
 
   // ── 2. SUCURSALES ──────────────────────────────────────────────────────────
-  const sucursalCentral = await prisma.sucursales.upsert({
+  const sucursalCentral = await prisma.sucursal.upsert({
     where:  { id: empresa.id },   // truco: usamos create/update por nombre
     update: {},
     create: {
-      empresa_id: empresa.id,
-      nombre:     'Sede Central',
-      direccion:  'Av. 25 de Mayo 1234',
-      ciudad:     'Formosa',
-      provincia:  'Formosa',
-      telefono:   '3704-123456',
-      email:      'central@gymdemo.com',
-      activo:     true,
+      empresaId: empresa.id,
+      nombre:    'Sede Central',
+      direccion: 'Av. 25 de Mayo 1234',
+      ciudad:    'Formosa',
+      provincia: 'Formosa',
+      telefono:  '3704-123456',
+      email:     'central@gymdemo.com',
+      activo:    true,
     },
-  }).catch(() => prisma.sucursales.findFirst({ where: { empresa_id: empresa.id, nombre: 'Sede Central' } })) as any;
+  }).catch(() => prisma.sucursal.findFirst({ where: { empresaId: empresa.id, nombre: 'Sede Central' } })) as any;
 
-  const sucursalNorte = await prisma.sucursales.findFirst({
-    where: { empresa_id: empresa.id, nombre: 'Sede Norte' }
-  }) ?? await prisma.sucursales.create({
+  const sucursalNorte = await prisma.sucursal.findFirst({
+    where: { empresaId: empresa.id, nombre: 'Sede Norte' }
+  }) ?? await prisma.sucursal.create({
     data: {
-      empresa_id: empresa.id,
-      nombre:     'Sede Norte',
-      direccion:  'Av. Circunvalación 567',
-      ciudad:     'Formosa',
-      provincia:  'Formosa',
-      telefono:   '3704-654321',
-      email:      'norte@gymdemo.com',
-      activo:     true,
+      empresaId: empresa.id,
+      nombre:    'Sede Norte',
+      direccion: 'Av. Circunvalación 567',
+      ciudad:    'Formosa',
+      provincia: 'Formosa',
+      telefono:  '3704-654321',
+      email:     'norte@gymdemo.com',
+      activo:    true,
     },
   });
   console.log(`✅ Sucursales: ${sucursalCentral.nombre}, ${sucursalNorte.nombre}`);
 
   // ── 3. PERMISOS (ya existen del seed SQL, pero por si acaso) ───────────────
-  const permisosExistentes = await prisma.permisos.count();
+  const permisosExistentes = await prisma.permiso.count();
   if (permisosExistentes === 0) {
-    await prisma.permisos.createMany({
+    await prisma.permiso.createMany({
       data: [
         { codigo: 'socios.ver',          modulo: 'socios',       descripcion: 'Ver socios' },
         { codigo: 'socios.crear',        modulo: 'socios',       descripcion: 'Crear socios' },
@@ -97,36 +98,36 @@ async function main() {
   }
 
   // ── 4. ROLES ───────────────────────────────────────────────────────────────
-  const rolAdmin = await prisma.roles.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'ADMIN' } },
+  const rolAdmin = await prisma.rol.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'ADMIN' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'ADMIN', descripcion: 'Administrador total', activo: true },
+    create: { empresaId: empresa.id, nombre: 'ADMIN', descripcion: 'Administrador total', activo: true },
   });
 
-  const rolRecepcion = await prisma.roles.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'RECEPCION' } },
+  const rolRecepcion = await prisma.rol.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'RECEPCION' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'RECEPCION', descripcion: 'Recepcionista', activo: true },
+    create: { empresaId: empresa.id, nombre: 'RECEPCION', descripcion: 'Recepcionista', activo: true },
   });
 
-  const rolProfesor = await prisma.roles.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'PROFESOR' } },
+  const rolProfesor = await prisma.rol.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'PROFESOR' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'PROFESOR', descripcion: 'Profesor / Instructor', activo: true },
+    create: { empresaId: empresa.id, nombre: 'PROFESOR', descripcion: 'Profesor / Instructor', activo: true },
   });
   console.log(`✅ Roles: ADMIN, RECEPCION, PROFESOR`);
 
   // ── 5. ASIGNAR PERMISOS A ROLES ────────────────────────────────────────────
-  const todosLosPermisos = await prisma.permisos.findMany();
-  const permisosAdmin    = todosLosPermisos.map(p => ({ rol_id: rolAdmin.id, permiso_id: p.id }));
+  const todosLosPermisos = await prisma.permiso.findMany();
+  const permisosAdmin    = todosLosPermisos.map(p => ({ rolId: rolAdmin.id, permisoId: p.id }));
   const permisosRecep    = todosLosPermisos
     .filter(p => ['socios','inscripciones','asistencias','pagos'].includes(p.modulo))
-    .map(p => ({ rol_id: rolRecepcion.id, permiso_id: p.id }));
+    .map(p => ({ rolId: rolRecepcion.id, permisoId: p.id }));
   const permisosProfe    = todosLosPermisos
     .filter(p => ['socios','asistencias','clases'].includes(p.modulo))
-    .map(p => ({ rol_id: rolProfesor.id, permiso_id: p.id }));
+    .map(p => ({ rolId: rolProfesor.id, permisoId: p.id }));
 
-  await prisma.rol_permisos.createMany({ data: [...permisosAdmin, ...permisosRecep, ...permisosProfe], skipDuplicates: true });
+  await prisma.rolPermiso.createMany({ data: [...permisosAdmin, ...permisosRecep, ...permisosProfe], skipDuplicates: true });
   console.log(`✅ Permisos asignados a roles`);
 
   // ── 6. USUARIOS ────────────────────────────────────────────────────────────
@@ -134,36 +135,36 @@ async function main() {
   const hashRecep    = await bcrypt.hash('Recep2025*',   12);
   const hashProfesor = await bcrypt.hash('Profe2025*',   12);
 
-  const usuarioAdmin = await prisma.usuarios.upsert({
+  const usuarioAdmin = await prisma.usuario.upsert({
     where:  { email: 'admin@gymdemo.com' },
     update: {},
     create: {
-      empresa_id:    empresa.id,
-      email:         'admin@gymdemo.com',
-      password_hash: hashAdmin,
-      activo:        true,
+      empresaId:    empresa.id,
+      email:        'admin@gymdemo.com',
+      passwordHash: hashAdmin,
+      activo:       true,
     },
   });
 
-  const usuarioRecep = await prisma.usuarios.upsert({
+  const usuarioRecep = await prisma.usuario.upsert({
     where:  { email: 'recepcion@gymdemo.com' },
     update: {},
     create: {
-      empresa_id:    empresa.id,
-      email:         'recepcion@gymdemo.com',
-      password_hash: hashRecep,
-      activo:        true,
+      empresaId:    empresa.id,
+      email:        'recepcion@gymdemo.com',
+      passwordHash: hashRecep,
+      activo:       true,
     },
   });
 
-  const usuarioProfe = await prisma.usuarios.upsert({
+  const usuarioProfe = await prisma.usuario.upsert({
     where:  { email: 'profesor@gymdemo.com' },
     update: {},
     create: {
-      empresa_id:    empresa.id,
-      email:         'profesor@gymdemo.com',
-      password_hash: hashProfesor,
-      activo:        true,
+      empresaId:    empresa.id,
+      email:        'profesor@gymdemo.com',
+      passwordHash: hashProfesor,
+      activo:       true,
     },
   });
   console.log(`✅ Usuarios creados:`);
@@ -173,11 +174,11 @@ async function main() {
 
   // ── 7. ASIGNAR ROLES A USUARIOS ────────────────────────────────────────────
   const hoy = new Date();
-  await prisma.usuario_roles.createMany({
+  await prisma.usuarioRol.createMany({
     data: [
-      { usuario_id: usuarioAdmin.id, rol_id: rolAdmin.id,    fecha_desde: hoy },
-      { usuario_id: usuarioRecep.id, rol_id: rolRecepcion.id,fecha_desde: hoy, sucursal_id: sucursalCentral.id },
-      { usuario_id: usuarioProfe.id, rol_id: rolProfesor.id, fecha_desde: hoy, sucursal_id: sucursalCentral.id },
+      { usuarioId: usuarioAdmin.id, rolId: rolAdmin.id,     fechaDesde: hoy },
+      { usuarioId: usuarioRecep.id, rolId: rolRecepcion.id, fechaDesde: hoy, sucursalId: sucursalCentral.id },
+      { usuarioId: usuarioProfe.id, rolId: rolProfesor.id,  fechaDesde: hoy, sucursalId: sucursalCentral.id },
     ],
     skipDuplicates: true,
   });
@@ -186,80 +187,80 @@ async function main() {
   // ── 8. TIPOS DE ROLES DE PERSONA ───────────────────────────────────────────
   const tiposRol: Record<string, any> = {};
   for (const nombre of ['SOCIO', 'PROFESOR', 'EMPLEADO', 'CLIENTE', 'PROVEEDOR']) {
-    tiposRol[nombre] = await prisma.tipo_roles_persona.upsert({
-      where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre } },
+    tiposRol[nombre] = await prisma.tipoRolPersona.upsert({
+      where:  { empresaId_nombre: { empresaId: empresa.id, nombre } },
       update: {},
-      create: { empresa_id: empresa.id, nombre, activo: true },
+      create: { empresaId: empresa.id, nombre, activo: true },
     });
   }
   console.log(`✅ Tipos de rol de persona: SOCIO, PROFESOR, EMPLEADO, CLIENTE, PROVEEDOR`);
 
   // ── 9. DISCIPLINAS ─────────────────────────────────────────────────────────
   const disciplinasData = [
-    { nombre: 'Musculación',  color_hex: '#2E5BA8', icono: 'dumbbell'   },
-    { nombre: 'Crossfit',     color_hex: '#D85A30', icono: 'flame'      },
-    { nombre: 'Yoga',         color_hex: '#1D9E75', icono: 'leaf'       },
-    { nombre: 'Pilates',      color_hex: '#7F77DD', icono: 'circle'     },
-    { nombre: 'Funcional',    color_hex: '#BA7517', icono: 'zap'        },
-    { nombre: 'Kick Boxing',  color_hex: '#E24B4A', icono: 'shield'     },
-    { nombre: 'Zumba',        color_hex: '#E91E8C', icono: 'music'      },
-    { nombre: 'Natación',     color_hex: '#0288D1', icono: 'droplets'   },
+    { nombre: 'Musculación',  colorHex: '#2E5BA8', icono: 'dumbbell'   },
+    { nombre: 'Crossfit',     colorHex: '#D85A30', icono: 'flame'      },
+    { nombre: 'Yoga',         colorHex: '#1D9E75', icono: 'leaf'       },
+    { nombre: 'Pilates',      colorHex: '#7F77DD', icono: 'circle'     },
+    { nombre: 'Funcional',    colorHex: '#BA7517', icono: 'zap'        },
+    { nombre: 'Kick Boxing',  colorHex: '#E24B4A', icono: 'shield'     },
+    { nombre: 'Zumba',        colorHex: '#E91E8C', icono: 'music'      },
+    { nombre: 'Natación',     colorHex: '#0288D1', icono: 'droplets'   },
   ];
 
   const disciplinas: Record<string, any> = {};
   for (const d of disciplinasData) {
-    disciplinas[d.nombre] = await prisma.disciplinas.upsert({
-      where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: d.nombre } },
+    disciplinas[d.nombre] = await prisma.disciplina.upsert({
+      where:  { empresaId_nombre: { empresaId: empresa.id, nombre: d.nombre } },
       update: {},
-      create: { empresa_id: empresa.id, ...d, activo: true },
+      create: { empresaId: empresa.id, ...d, activo: true },
     });
   }
   console.log(`✅ Disciplinas: ${Object.keys(disciplinas).join(', ')}`);
 
   // ── 10. PLANES ─────────────────────────────────────────────────────────────
-  const planMensualBasico = await prisma.planes.findFirst({ where: { empresa_id: empresa.id, nombre: 'Mensual Básico' } })
-    ?? await prisma.planes.create({ data: {
-      empresa_id:               empresa.id,
-      nombre:                   'Mensual Básico',
-      descripcion:              'Acceso a musculación y funcional — 1 sucursal',
-      precio:                   15000,
-      duracion_dias:            30,
-      tipo:                     'MENSUAL',
-      acceso_todas_sucursales:  false,
-      activo:                   true,
+  const planMensualBasico = await prisma.plan.findFirst({ where: { empresaId: empresa.id, nombre: 'Mensual Básico' } })
+    ?? await prisma.plan.create({ data: {
+      empresaId:             empresa.id,
+      nombre:                'Mensual Básico',
+      descripcion:           'Acceso a musculación y funcional — 1 sucursal',
+      precio:                15000,
+      duracionDias:          30,
+      tipo:                  'MENSUAL',
+      accesoTodasSucursales: false,
+      activo:                true,
     }});
 
-  const planMensualFull = await prisma.planes.findFirst({ where: { empresa_id: empresa.id, nombre: 'Mensual Full' } })
-    ?? await prisma.planes.create({ data: {
-      empresa_id:               empresa.id,
-      nombre:                   'Mensual Full',
-      descripcion:              'Acceso a todas las disciplinas y sucursales',
-      precio:                   25000,
-      duracion_dias:            30,
-      tipo:                     'MENSUAL',
-      acceso_todas_sucursales:  true,
-      activo:                   true,
+  const planMensualFull = await prisma.plan.findFirst({ where: { empresaId: empresa.id, nombre: 'Mensual Full' } })
+    ?? await prisma.plan.create({ data: {
+      empresaId:             empresa.id,
+      nombre:                'Mensual Full',
+      descripcion:           'Acceso a todas las disciplinas y sucursales',
+      precio:                25000,
+      duracionDias:          30,
+      tipo:                  'MENSUAL',
+      accesoTodasSucursales: true,
+      activo:                true,
     }});
 
-  const planTrimestral = await prisma.planes.findFirst({ where: { empresa_id: empresa.id, nombre: 'Trimestral Full' } })
-    ?? await prisma.planes.create({ data: {
-      empresa_id:               empresa.id,
-      nombre:                   'Trimestral Full',
-      descripcion:              'Acceso total por 3 meses — ahorro 15%',
-      precio:                   63750,
-      duracion_dias:            90,
-      tipo:                     'TRIMESTRAL',
-      acceso_todas_sucursales:  true,
-      activo:                   true,
+  const planTrimestral = await prisma.plan.findFirst({ where: { empresaId: empresa.id, nombre: 'Trimestral Full' } })
+    ?? await prisma.plan.create({ data: {
+      empresaId:             empresa.id,
+      nombre:                'Trimestral Full',
+      descripcion:           'Acceso total por 3 meses — ahorro 15%',
+      precio:                63750,
+      duracionDias:          90,
+      tipo:                  'TRIMESTRAL',
+      accesoTodasSucursales: true,
+      activo:                true,
     }});
 
   // Asignar disciplinas a planes
-  await prisma.plan_disciplinas.createMany({
+  await prisma.planDisciplina.createMany({
     data: [
-      { plan_id: planMensualBasico.id, disciplina_id: disciplinas['Musculación'].id },
-      { plan_id: planMensualBasico.id, disciplina_id: disciplinas['Funcional'].id   },
-      ...Object.values(disciplinas).map((d: any) => ({ plan_id: planMensualFull.id,   disciplina_id: d.id })),
-      ...Object.values(disciplinas).map((d: any) => ({ plan_id: planTrimestral.id,    disciplina_id: d.id })),
+      { planId: planMensualBasico.id, disciplinaId: disciplinas['Musculación'].id },
+      { planId: planMensualBasico.id, disciplinaId: disciplinas['Funcional'].id   },
+      ...Object.values(disciplinas).map((d: any) => ({ planId: planMensualFull.id, disciplinaId: d.id })),
+      ...Object.values(disciplinas).map((d: any) => ({ planId: planTrimestral.id,  disciplinaId: d.id })),
     ],
     skipDuplicates: true,
   });
@@ -275,10 +276,10 @@ async function main() {
   ];
   const mediosPago: Record<string, any> = {};
   for (const mp of mediosPagoData) {
-    mediosPago[mp.nombre] = await prisma.medios_pago.upsert({
-      where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: mp.nombre } },
+    mediosPago[mp.nombre] = await prisma.medioPago.upsert({
+      where:  { empresaId_nombre: { empresaId: empresa.id, nombre: mp.nombre } },
       update: {},
-      create: { empresa_id: empresa.id, ...mp, activo: true },
+      create: { empresaId: empresa.id, ...mp, activo: true },
     });
   }
   console.log(`✅ Medios de pago: ${Object.keys(mediosPago).join(', ')}`);
@@ -295,53 +296,53 @@ async function main() {
   let socioNum = 1;
   for (const s of sociosData) {
     // Verificar si ya existe
-    const existe = await prisma.personas.findFirst({
-      where: { empresa_id: empresa.id, apellidos: s.apellidos, nombres: s.nombres },
+    const existe = await prisma.persona.findFirst({
+      where: { empresaId: empresa.id, apellidos: s.apellidos, nombres: s.nombres },
     });
     if (existe) { socioNum++; continue; }
 
     const numStr = String(socioNum).padStart(5, '0');
 
-    const persona = await prisma.personas.create({ data: {
-      empresa_id: empresa.id,
-      nombres:    s.nombres,
-      apellidos:  s.apellidos,
-      genero:     s.genero as any,
-      qr_code:    `SG-${empresa.id.slice(0,8)}-${numStr}`,
-      activo:     true,
-      persona_documentos: { create: { tipo: 'DNI', numero: s.dni } },
-      persona_contactos:  { create: { tipo: 'CEL', valor: s.tel, principal: true } },
+    const persona = await prisma.persona.create({ data: {
+      empresaId: empresa.id,
+      nombres:   s.nombres,
+      apellidos: s.apellidos,
+      genero:    s.genero as any,
+      qrCode:    `SG-${empresa.id.slice(0,8)}-${numStr}`,
+      activo:    true,
+      documentos: { create: { tipo: 'DNI', numero: s.dni } },
+      contactos:  { create: { tipo: 'CEL', valor: s.tel, principal: true } },
     }});
 
-    const personaRol = await prisma.persona_roles.create({ data: {
-      persona_id:   persona.id,
-      tipo_rol_id:  tiposRol['SOCIO'].id,
-      sucursal_id:  sucursalCentral.id,
-      numero_socio: numStr,
-      fecha_alta:   new Date(),
+    const personaRol = await prisma.personaRol.create({ data: {
+      personaId:   persona.id,
+      tipoRolId:   tiposRol['SOCIO'].id,
+      sucursalId:  sucursalCentral.id,
+      numeroSocio: numStr,
+      fechaAlta:   new Date(),
     }});
 
     // Inscripción activa con plan mensual full
     const fechaInicio = new Date();
     const fechaFin    = new Date(); fechaFin.setDate(fechaFin.getDate() + 30);
 
-    const inscripcion = await prisma.inscripciones.create({ data: {
-      persona_rol_id: personaRol.id,
-      plan_id:        planMensualFull.id,
-      sucursal_id:    sucursalCentral.id,
-      fecha_inicio:   fechaInicio,
-      fecha_fin:      fechaFin,
-      precio_pagado:  planMensualFull.precio,
-      estado:         'ACTIVA',
+    const inscripcion = await prisma.inscripcion.create({ data: {
+      personaRolId: personaRol.id,
+      planId:       planMensualFull.id,
+      sucursalId:   sucursalCentral.id,
+      fechaInicio:  fechaInicio,
+      fechaFin:     fechaFin,
+      precioPagado: planMensualFull.precio,
+      estado:       'ACTIVA',
     }});
 
     // Pago registrado
-    await prisma.pagos.create({ data: {
-      inscripcion_id: inscripcion.id,
-      medio_pago_id:  mediosPago['Efectivo'].id,
-      monto:          planMensualFull.precio,
-      estado:         'APROBADO',
-      usuario_id:     usuarioAdmin.id,
+    await prisma.pago.create({ data: {
+      inscripcionId: inscripcion.id,
+      medioPagoId:   mediosPago['Efectivo'].id,
+      monto:         planMensualFull.precio,
+      estado:        'APROBADO',
+      usuarioId:     usuarioAdmin.id,
     }});
 
     socioNum++;
@@ -349,40 +350,40 @@ async function main() {
   console.log(`✅ Socios de prueba: ${sociosData.map(s => s.nombres + ' ' + s.apellidos).join(', ')}`);
 
   // ── 13. PERSONA + ROL PROFESOR ─────────────────────────────────────────────
-  const profExiste = await prisma.personas.findFirst({
-    where: { empresa_id: empresa.id, apellidos: 'Suárez', nombres: 'Andrés' },
+  const profExiste = await prisma.persona.findFirst({
+    where: { empresaId: empresa.id, apellidos: 'Suárez', nombres: 'Andrés' },
   });
 
   if (!profExiste) {
-    const profesor = await prisma.personas.create({ data: {
-      empresa_id: empresa.id,
-      nombres:    'Andrés',
-      apellidos:  'Suárez',
-      genero:     'M',
-      qr_code:    `SG-${empresa.id.slice(0,8)}-PROF01`,
-      activo:     true,
-      persona_contactos: { create: { tipo: 'CEL', valor: '3704-999999', principal: true } },
+    const profesor = await prisma.persona.create({ data: {
+      empresaId: empresa.id,
+      nombres:   'Andrés',
+      apellidos: 'Suárez',
+      genero:    'M',
+      qrCode:    `SG-${empresa.id.slice(0,8)}-PROF01`,
+      activo:    true,
+      contactos: { create: { tipo: 'CEL', valor: '3704-999999', principal: true } },
     }});
 
     // Vincular con el usuario profesor
-    await prisma.usuarios.update({
+    await prisma.usuario.update({
       where: { id: usuarioProfe.id },
-      data:  { persona_id: profesor.id },
+      data:  { personaId: profesor.id },
     });
 
-    const profRol = await prisma.persona_roles.create({ data: {
-      persona_id:  profesor.id,
-      tipo_rol_id: tiposRol['PROFESOR'].id,
-      sucursal_id: sucursalCentral.id,
-      fecha_alta:  new Date(),
+    const profRol = await prisma.personaRol.create({ data: {
+      personaId:  profesor.id,
+      tipoRolId:  tiposRol['PROFESOR'].id,
+      sucursalId: sucursalCentral.id,
+      fechaAlta:  new Date(),
     }});
 
     // Disciplinas que dicta
-    await prisma.profesor_disciplinas.createMany({
+    await prisma.profesorDisciplina.createMany({
       data: [
-        { persona_rol_id: profRol.id, disciplina_id: disciplinas['Musculación'].id, nivel: 'AVANZADO' },
-        { persona_rol_id: profRol.id, disciplina_id: disciplinas['Funcional'].id,   nivel: 'AVANZADO' },
-        { persona_rol_id: profRol.id, disciplina_id: disciplinas['Crossfit'].id,    nivel: 'INTERMEDIO' },
+        { personaRolId: profRol.id, disciplinaId: disciplinas['Musculación'].id, nivel: 'AVANZADO' },
+        { personaRolId: profRol.id, disciplinaId: disciplinas['Funcional'].id,   nivel: 'AVANZADO' },
+        { personaRolId: profRol.id, disciplinaId: disciplinas['Crossfit'].id,    nivel: 'INTERMEDIO' },
       ],
       skipDuplicates: true,
     });
@@ -390,71 +391,71 @@ async function main() {
   }
 
   // ── 14. CATEGORÍAS Y PRODUCTOS ─────────────────────────────────────────────
-  const catSuplem = await prisma.categorias_productos.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'Suplementos' } },
+  const catSuplem = await prisma.categoriaProducto.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'Suplementos' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'Suplementos', activo: true },
+    create: { empresaId: empresa.id, nombre: 'Suplementos', activo: true },
   });
 
-  const catIndum = await prisma.categorias_productos.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'Indumentaria' } },
+  const catIndum = await prisma.categoriaProducto.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'Indumentaria' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'Indumentaria', activo: true },
+    create: { empresaId: empresa.id, nombre: 'Indumentaria', activo: true },
   });
 
-  const marcaON = await prisma.marcas.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'Optimum Nutrition' } },
+  const marcaON = await prisma.marca.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'Optimum Nutrition' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'Optimum Nutrition', activo: true },
+    create: { empresaId: empresa.id, nombre: 'Optimum Nutrition', activo: true },
   });
 
-  const marcaGeneric = await prisma.marcas.upsert({
-    where:  { empresa_id_nombre: { empresa_id: empresa.id, nombre: 'Gym Demo Brand' } },
+  const marcaGeneric = await prisma.marca.upsert({
+    where:  { empresaId_nombre: { empresaId: empresa.id, nombre: 'Gym Demo Brand' } },
     update: {},
-    create: { empresa_id: empresa.id, nombre: 'Gym Demo Brand', activo: true },
+    create: { empresaId: empresa.id, nombre: 'Gym Demo Brand', activo: true },
   });
 
   const productosData = [
-    { nombre: 'Whey Protein 2kg', cat: catSuplem.id, marca: marcaON.id,      codigo: 'WP-2KG',   precio_venta: 45000, precio_costo: 28000 },
-    { nombre: 'Creatina 300g',    cat: catSuplem.id, marca: marcaON.id,      codigo: 'CR-300G',  precio_venta: 18000, precio_costo: 10000 },
-    { nombre: 'Remera Dry Fit',   cat: catIndum.id,  marca: marcaGeneric.id, codigo: 'REM-DF',   precio_venta: 8500,  precio_costo: 4000  },
-    { nombre: 'Short Training',   cat: catIndum.id,  marca: marcaGeneric.id, codigo: 'SHO-TR',   precio_venta: 9500,  precio_costo: 4500  },
-    { nombre: 'Botella 750ml',    cat: catIndum.id,  marca: marcaGeneric.id, codigo: 'BOT-750',  precio_venta: 3500,  precio_costo: 1500  },
+    { nombre: 'Whey Protein 2kg', cat: catSuplem.id, marca: marcaON.id,      codigo: 'WP-2KG',   precioVenta: 45000, precioCosto: 28000 },
+    { nombre: 'Creatina 300g',    cat: catSuplem.id, marca: marcaON.id,      codigo: 'CR-300G',  precioVenta: 18000, precioCosto: 10000 },
+    { nombre: 'Remera Dry Fit',   cat: catIndum.id,  marca: marcaGeneric.id, codigo: 'REM-DF',   precioVenta: 8500,  precioCosto: 4000  },
+    { nombre: 'Short Training',   cat: catIndum.id,  marca: marcaGeneric.id, codigo: 'SHO-TR',   precioVenta: 9500,  precioCosto: 4500  },
+    { nombre: 'Botella 750ml',    cat: catIndum.id,  marca: marcaGeneric.id, codigo: 'BOT-750',  precioVenta: 3500,  precioCosto: 1500  },
   ];
 
   const productos: any[] = [];
   for (const prod of productosData) {
-    const p = await prisma.productos.findFirst({ where: { empresa_id: empresa.id, codigo: prod.codigo } })
-      ?? await prisma.productos.create({ data: {
-        empresa_id:   empresa.id,
-        categoria_id: prod.cat,
-        marca_id:     prod.marca,
-        nombre:       prod.nombre,
-        codigo:       prod.codigo,
-        precio_venta: prod.precio_venta,
-        precio_costo: prod.precio_costo,
-        activo:       true,
+    const p = await prisma.producto.findFirst({ where: { empresaId: empresa.id, codigo: prod.codigo } })
+      ?? await prisma.producto.create({ data: {
+        empresaId:   empresa.id,
+        categoriaId: prod.cat,
+        marcaId:     prod.marca,
+        nombre:      prod.nombre,
+        codigo:      prod.codigo,
+        precioVenta: prod.precioVenta,
+        precioCosto: prod.precioCosto,
+        activo:      true,
       }});
     productos.push(p);
 
     // Stock inicial en sucursal central
     const invExiste = await prisma.inventario.findFirst({
-      where: { sucursal_id: sucursalCentral.id, producto_id: p.id, variante_id: null },
+      where: { sucursalId: sucursalCentral.id, productoId: p.id, varianteId: null },
     });
     if (!invExiste) {
       await prisma.inventario.create({ data: {
-        sucursal_id:  sucursalCentral.id,
-        producto_id:  p.id,
-        stock_actual: 20,
-        stock_minimo: 5,
+        sucursalId:  sucursalCentral.id,
+        productoId:  p.id,
+        stockActual: 20,
+        stockMinimo: 5,
       }});
-      await prisma.movimientos_stock.create({ data: {
-        sucursal_id: sucursalCentral.id,
-        producto_id: p.id,
-        tipo:        'ENTRADA',
-        cantidad:    20,
-        motivo:      'Stock inicial seed',
-        usuario_id:  usuarioAdmin.id,
+      await prisma.movimientoStock.create({ data: {
+        sucursalId: sucursalCentral.id,
+        productoId: p.id,
+        tipo:       'ENTRADA',
+        cantidad:   20,
+        motivo:     'Stock inicial seed',
+        usuarioId:  usuarioAdmin.id,
       }});
     }
   }
