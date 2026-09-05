@@ -10,6 +10,8 @@ import { env } from './config/env';
 import { logger } from './lib/logger';
 import routes from './routes';
 import { errorHandler, notFound } from './middlewares/error.middleware';
+
+
 const app = express();
 // ── Seguridad ─────────────────────────────────────────────────────────────────
 app.use(helmet());
@@ -40,6 +42,9 @@ app.use('/api/v1/auth/login', rateLimit({
   message:  { ok: false, error: 'Demasiados intentos de login' },
 }));
 // ── Parsing & compresión ──────────────────────────────────────────────────────
+app.use(helmet()); 
+app.use( rateLimit({ windowMs: 15 * 60 * 1000, limit: 1000, message: 
+  { error: 'Demasiadas solicitudes, intentá más tarde' }, standardHeaders: true, legacyHeaders: false, }), ); 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
