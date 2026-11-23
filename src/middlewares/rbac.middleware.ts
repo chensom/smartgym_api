@@ -4,7 +4,7 @@ import { err } from '../types/api.types';
 
 const cache = new Map<string, { permisos: string[]; exp: number }>();
 
-async function getPermisosUsuario(usuarioId: string): Promise<string[]> {
+export async function getPermisosUsuario(usuarioId: string): Promise<string[]> {
   const cached = cache.get(usuarioId);
   if (cached && cached.exp > Date.now()) return cached.permisos;
 

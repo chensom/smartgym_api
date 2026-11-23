@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma';
+import { getPermisosUsuario } from '../middlewares/rbac.middleware';
 import { env } from '../config/env';
 import { LoginInput } from '../schemas/auth.schema';
 
@@ -49,6 +50,10 @@ export class AuthService {
 
     const accessToken  = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
     const refreshToken = firmarRefresh(usuario.id);
+    // El frontend los usa para decidir a dónde va después del login (ej. el usuario
+    // de la Pantalla de ingreso va directo al kiosco). Los permisos se siguen
+    // chequeando en cada endpoint: esto es solo para la navegación.
+    const permisos = await getPermisosUsuario(usuario.id);
 
     return {
       accessToken,
@@ -58,6 +63,7 @@ export class AuthService {
         email:     usuario.email,
         empresaId: usuario.empresaId,
         persona:   usuario.persona ?? null,
+        permisos,
       },
     };
   }
