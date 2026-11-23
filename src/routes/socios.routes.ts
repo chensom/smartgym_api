@@ -6,12 +6,32 @@ import { validate } from '../middlewares/validate.middleware';
 import { crearPersonaSchema, actualizarPersonaSchema } from '../schemas/personas.schema';
 import { idParamSchema } from '../schemas/common.schema';
 import { prisma } from '../lib/prisma';
-import { ok, err } from '../types/api.types';
+import { ok, err, paginate } from '../types/api.types';
+import { z } from 'zod';
+import { listarPorEstadoCuota, ESTADOS_CUOTA } from '../services/estadoCuota.service';
+
+const estadoCuotaQuerySchema = z.object({
+  estado: z.enum(ESTADOS_CUOTA).optional(),
+  q:      z.string().trim().max(100).optional(),
+  page:   z.coerce.number().int().min(1).max(10_000).default(1),
+  limit:  z.coerce.number().int().min(1).max(100).default(20),
+});
 
 const router = Router();
 router.use(auth);
 
 router.get('/',      rbac('socios.ver'),      sociosController.listar);
+
+// Lista de socios con el estado de la cuota y la cantidad por estado (etapa 2 del rediseño).
+// Va ANTES de '/:id' para que 'estado-cuota' no se tome como un id.
+router.get('/estado-cuota', rbac('socios.ver'), validate(estadoCuotaQuerySchema, 'query'), async (req: any, res, next) => {
+  try {
+    const { estado, q, page, limit } = req.query;
+    const r = await listarPorEstadoCuota(req.empresaId!, { estado, q, page, limit });
+    res.json(ok({ socios: r.socios, conteos: r.conteos, totalSocios: r.totalSocios, hoy: r.hoy },
+                undefined, paginate(r.total, page, limit)));
+  } catch (e) { next(e); }
+});
 router.get('/:id',   rbac('socios.ver'),      validate(idParamSchema, 'params'), sociosController.obtener);
 router.post('/',     rbac('socios.crear'),    validate(crearPersonaSchema),       sociosController.crear);
 router.patch('/:id', rbac('socios.editar'),   validate(idParamSchema, 'params'),

@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/httpError';
 import { calcularCuota, configDeEmpresa, SELECT_REGLA_EMPRESA } from '../lib/calcularCuota';
 import { hoyArgentina, deFechaDB, diasEntre, periodoDe, formatoFecha, formatoMes } from '../lib/fechas';
+import { elegirMembresia } from '../lib/membresiaVigente';
 
 /** Estados que son historial cerrado: no representan la membresía actual del socio. */
 const ESTADOS_HISTORICOS = ['BAJA_CAMBIO_PLAN', 'CANCELADA'];
@@ -72,7 +73,9 @@ async function evaluarMembresia(
 const includeMembresia = {
   where:   { estado: { notIn: ESTADOS_HISTORICOS } },
   orderBy: [{ fechaFin: 'desc' as const }, { createdAt: 'desc' as const }],
-  take:    1,
+  // Se traen las últimas y se elige con elegirMembresia() (la que cubre hoy),
+  // no simplemente la primera: un mes siguiente cargado sin pagar no debe tapar al actual.
+  take:    24,
   include: {
     plan: {
       select: {
@@ -112,7 +115,7 @@ async function resolverIngreso(empresaId: string, persona: NonNullable<PersonaIn
     const rol = persona.roles[0];
     return { rol, tipoRol: rol.tipoRol.nombre, ins: null, vigente: false, aviso: null as AvisoAsistencia | null, sucursalNoHabilitada: false };
   }
-  const ins = rolSocio.inscripciones[0] ?? null;
+  const ins = elegirMembresia(rolSocio.inscripciones, hoy);
   const { vigente, aviso } = await evaluarMembresia(empresaId, ins, hoy);
   const sucursalNoHabilitada = !!(ins && vigente && !ins.plan.accesoTodasSucursales && ins.sucursalId !== sucursalId);
   return { rol: rolSocio, tipoRol: 'SOCIO', ins, vigente, aviso, sucursalNoHabilitada };

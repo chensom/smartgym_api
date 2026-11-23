@@ -8,6 +8,7 @@ import { validate } from '../middlewares/validate.middleware';
 import { z } from 'zod';
 import { evaluarMembresia, includeMembresia } from '../services/asistencias.service';
 import { hoyArgentina, deFechaDB, diasEntre } from '../lib/fechas';
+import { elegirMembresia } from '../lib/membresiaVigente';
 
 const router = Router();
 router.use(auth);
@@ -59,7 +60,7 @@ router.get('/buscar-dni/:dni', rbac('asistencias.ver'), async (req: any, res, ne
       return;
     }
 
-    const inscripcion    = persona.roles?.[0]?.inscripciones?.[0];
+    const inscripcion    = elegirMembresia(persona.roles?.[0]?.inscripciones, hoyArgentina());
     const tipoRolNombre   = persona.roles?.[0]?.tipoRol?.nombre ?? null;
     // Solo los SOCIOS necesitan una membresía activa para ingresar; profesores,
     // empleados, etc. pueden marcar asistencia libremente.
