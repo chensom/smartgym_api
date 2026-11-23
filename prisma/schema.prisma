@@ -46,6 +46,16 @@ model Empresa {
   sitioWeb        String?   @map("sitio_web") @db.VarChar(200)
   instagram       String?   @db.VarChar(100)
   facebook        String?   @db.VarChar(100)
+  // Cuota mensual por mes calendario: último día de cada tramo (ver calcularCuota.ts)
+  cuotaDiaFinBonificado Int @default(5)  @map("cuota_dia_fin_bonificado") @db.SmallInt
+  cuotaDiaFinNormal     Int @default(10) @map("cuota_dia_fin_normal") @db.SmallInt
+  // Regla general de descuento (días 1..fin bonificado) y recargo (después del
+  // fin normal) sobre el precio de cada plan de mes calendario.
+  // Tipo: NINGUNO | PORCENTAJE | MONTO (pesos que se restan/suman). Sin redondeo.
+  cuotaBonifTipo        String  @default("NINGUNO") @map("cuota_bonif_tipo") @db.VarChar(12)
+  cuotaBonifValor       Decimal @default(0) @map("cuota_bonif_valor") @db.Decimal(12, 2)
+  cuotaRecargoTipo      String  @default("NINGUNO") @map("cuota_recargo_tipo") @db.VarChar(12)
+  cuotaRecargoValor     Decimal @default(0) @map("cuota_recargo_valor") @db.Decimal(12, 2)
   activo          Boolean   @default(true)
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
@@ -408,6 +418,15 @@ model Plan {
   tipo                  String
   accesoTodasSucursales Boolean   @default(false) @map("acceso_todas_sucursales")
   cantidadClases        Int?      @map("cantidad_clases")
+  modalidadCobro        String    @default("DIAS") @map("modalidad_cobro") @db.VarChar(20) // DIAS | MES_CALENDARIO
+  // Excepción del plan a la regla del gimnasio (solo MES_CALENDARIO), por
+  // separado para descuento y recargo. Tipo NULL = usa la del gimnasio.
+  // (precio_bonificado / precio_recargo quedan en la base sin usar, para
+  // poder volver atrás; se borran en una migración posterior.)
+  bonifTipo             String?   @map("bonif_tipo") @db.VarChar(12)
+  bonifValor            Decimal?  @map("bonif_valor") @db.Decimal(12, 2)
+  recargoTipo           String?   @map("recargo_tipo") @db.VarChar(12)
+  recargoValor          Decimal?  @map("recargo_valor") @db.Decimal(12, 2)
   activo                Boolean   @default(true)
   deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
@@ -445,12 +464,17 @@ model Inscripcion {
   precioPagado  Decimal  @map("precio_pagado") @db.Decimal(12, 2)
   estado        String   @default("PENDIENTE")
   observaciones String?
+  periodo             DateTime? @db.Date                                    // día 1 del mes (solo MES_CALENDARIO)
+  tramoPrecio         String?   @map("tramo_precio") @db.VarChar(12)        // BONIFICADO | NORMAL | RECARGO | MANUAL | CAMBIO_PLAN
+  inscripcionOrigenId String?   @map("inscripcion_origen_id") @db.Uuid      // cambio de plan: de qué inscripción viene
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   personaRol  PersonaRol     @relation(fields: [personaRolId], references: [id])
   plan        Plan           @relation(fields: [planId], references: [id])
   sucursal    Sucursal       @relation(fields: [sucursalId], references: [id])
+  origen      Inscripcion?   @relation("CambioPlan", fields: [inscripcionOrigenId], references: [id])
+  derivadas   Inscripcion[]  @relation("CambioPlan")
   asistencias Asistencia[]
   reservas    ReservaClase[]
   pagos       Pago[]
@@ -458,6 +482,8 @@ model Inscripcion {
   @@index([personaRolId])
   @@index([planId])
   @@index([sucursalId])
+  // Índices parciales en la base (no expresables en Prisma): inscripciones_origen_idx,
+  // inscripciones_socio_plan_periodo_uq, uq_inscripcion_activa_por_socio
   @@map("inscripciones")
 }
 

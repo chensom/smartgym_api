@@ -3,6 +3,7 @@ import { auth } from '../middlewares/auth.middleware';
 import { rbac } from '../middlewares/rbac.middleware';
 import { prisma } from '../lib/prisma';
 import { ok, err } from '../types/api.types';
+import { configDeEmpresa, parsearAjuste, preciosDelPlan, SELECT_REGLA_EMPRESA } from '../lib/calcularCuota';
 
 import authRoutes          from './auth.routes';
 import sociosRoutes        from './socios.routes';
@@ -91,22 +92,75 @@ router.post('/sucursales', auth, rbac('configuracion.editar'), async (req: any, 
 
 router.patch('/sucursales/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
+    const existente = await prisma.sucursal.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Sucursal no encontrada')); return; }
+    const { nombre, direccion, ciudad, provincia, telefono, email, activo } = req.body ?? {};
     const sucursal = await prisma.sucursal.update({
-      where: { id: req.params.id },
-      data:  req.body,
+      where: { id: existente.id },
+      data: {
+        ...(nombre    !== undefined && { nombre }),
+        ...(direccion !== undefined && { direccion }),
+        ...(ciudad    !== undefined && { ciudad }),
+        ...(provincia !== undefined && { provincia }),
+        ...(telefono  !== undefined && { telefono }),
+        ...(email     !== undefined && { email }),
+        ...(activo    !== undefined && { activo: !!activo }),
+      },
     });
     res.json(ok(sucursal));
   } catch (e) { next(e); }
 });
 
 // ── Planes ─────────────────────────────────────────────────────────────────
+// Modalidad de cobro y excepción del plan a la regla de descuento/recargo del
+// gimnasio (solo mes calendario). Devuelve el objeto `data` listo para Prisma
+// o un string con el error de validación.
+function datosPlan(body: any, tipoFinal: string | undefined, modalidadActual?: string): Record<string, any> | string {
+  const data: Record<string, any> = {};
+  if (body.modalidadCobro !== undefined) {
+    if (!['DIAS', 'MES_CALENDARIO'].includes(body.modalidadCobro)) return 'modalidadCobro debe ser DIAS o MES_CALENDARIO';
+    data.modalidadCobro = body.modalidadCobro;
+  }
+  const modalidad = data.modalidadCobro ?? modalidadActual ?? 'DIAS';
+  if (modalidad === 'MES_CALENDARIO' && tipoFinal !== 'MENSUAL') {
+    return 'El cobro por mes calendario solo está disponible para planes de tipo MENSUAL';
+  }
+  if (modalidad !== 'MES_CALENDARIO') {
+    // por días no hay tramos: nunca queda una excepción colgada
+    data.bonifTipo = null; data.bonifValor = null; data.recargoTipo = null; data.recargoValor = null;
+    return data;
+  }
+  if (body.bonifTipo !== undefined) {
+    const a = parsearAjuste(body.bonifTipo, body.bonifValor, 'Descuento del plan', true);
+    if (typeof a === 'string') return a;
+    data.bonifTipo = a.tipo; data.bonifValor = a.valor;
+  }
+  if (body.recargoTipo !== undefined) {
+    const a = parsearAjuste(body.recargoTipo, body.recargoValor, 'Recargo del plan', true);
+    if (typeof a === 'string') return a;
+    data.recargoTipo = a.tipo; data.recargoValor = a.valor;
+  }
+  return data;
+}
+
+/** El plan con sus tres precios ya calculados (solo mes calendario), para mostrar. */
+function conPreciosCuota<T extends { modalidadCobro: string }>(plan: T, regla: ReturnType<typeof configDeEmpresa>) {
+  return { ...plan, preciosCuota: plan.modalidadCobro === 'MES_CALENDARIO' ? preciosDelPlan(plan as any, regla) : null };
+}
+
+async function reglaDeEmpresa(empresaId: string) {
+  const e = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId }, select: SELECT_REGLA_EMPRESA });
+  return configDeEmpresa(e);
+}
+
 router.get('/planes', auth, rbac('socios.ver'), async (req: any, res, next) => {
   try {
     const planes = await prisma.plan.findMany({
       where:   { empresaId: req.empresaId, deletedAt: null },
       orderBy: { nombre: 'asc' },
     });
-    res.json(ok(planes));
+    const regla = await reglaDeEmpresa(req.empresaId);
+    res.json(ok(planes.map((p) => conPreciosCuota(p, regla))));
   } catch (e) { next(e); }
 });
 
@@ -114,6 +168,8 @@ router.post('/planes', auth, rbac('configuracion.editar'), async (req: any, res,
   try {
     const { nombre, descripcion, precio, duracionDias, tipo, accesoTodasSucursales, cantidadClases } = req.body;
     if (!nombre || !precio) { res.status(400).json(err('nombre y precio son requeridos')); return; }
+    const extra = datosPlan(req.body, tipo || 'MENSUAL', 'DIAS');
+    if (typeof extra === 'string') { res.status(400).json(err(extra)); return; }
     const plan = await prisma.plan.create({
       data: {
         empresaId: req.empresaId,
@@ -125,16 +181,39 @@ router.post('/planes', auth, rbac('configuracion.editar'), async (req: any, res,
         accesoTodasSucursales: accesoTodasSucursales ?? false,
         cantidadClases:        cantidadClases ? parseInt(cantidadClases) : null,
         activo:                true,
+        ...extra,
       },
     });
-    res.status(201).json(ok(plan, 'Plan creado'));
+    res.status(201).json(ok(conPreciosCuota(plan, await reglaDeEmpresa(req.empresaId)), 'Plan creado'));
   } catch (e) { next(e); }
 });
 
 router.patch('/planes/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
-    const plan = await prisma.plan.update({ where: { id: req.params.id }, data: req.body });
-    res.json(ok(plan));
+    const existente = await prisma.plan.findFirst({ where: { id: req.params.id, empresaId: req.empresaId, deletedAt: null } });
+    if (!existente) { res.status(404).json(err('Plan no encontrado')); return; }
+
+    const b = req.body ?? {};
+    const tipoFinal = b.tipo ?? existente.tipo;
+    const extra = datosPlan({ modalidadCobro: b.modalidadCobro,
+                              bonifTipo: b.bonifTipo, bonifValor: b.bonifValor,
+                              recargoTipo: b.recargoTipo, recargoValor: b.recargoValor },
+                            tipoFinal, existente.modalidadCobro);
+    if (typeof extra === 'string') { res.status(400).json(err(extra)); return; }
+
+    // Solo campos editables (antes se pasaba req.body entero a Prisma).
+    const data: Record<string, any> = { ...extra };
+    if (b.nombre                !== undefined) data.nombre                = b.nombre;
+    if (b.descripcion           !== undefined) data.descripcion           = b.descripcion;
+    if (b.precio                !== undefined) data.precio                = parseFloat(b.precio);
+    if (b.duracionDias          !== undefined) data.duracionDias          = parseInt(b.duracionDias);
+    if (b.tipo                  !== undefined) data.tipo                  = b.tipo;
+    if (b.accesoTodasSucursales !== undefined) data.accesoTodasSucursales = !!b.accesoTodasSucursales;
+    if (b.cantidadClases        !== undefined) data.cantidadClases        = b.cantidadClases ? parseInt(b.cantidadClases) : null;
+    if (b.activo                !== undefined) data.activo                = !!b.activo;
+
+    const plan = await prisma.plan.update({ where: { id: existente.id }, data });
+    res.json(ok(conPreciosCuota(plan, await reglaDeEmpresa(req.empresaId))));
   } catch (e) { next(e); }
 });
 
@@ -160,9 +239,11 @@ router.get('/disciplinas', auth, rbac('socios.ver'), async (req: any, res, next)
 
 router.patch('/disciplinas/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
+    const existente = await prisma.disciplina.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Disciplina no encontrada')); return; }
     const { nombre, descripcion, colorHex, activo } = req.body;
     const disc = await prisma.disciplina.update({
-      where: { id: req.params.id },
+      where: { id: existente.id },
       data: {
         ...(nombre      !== undefined && { nombre }),
         ...(descripcion !== undefined && { descripcion }),
@@ -446,8 +527,36 @@ router.patch('/empresa', auth, rbac('configuracion.editar'), async (req: any, re
     const {
       nombreComercial, slogan, colorPrimario, colorSecundario,
       direccion, telefono, email, sitioWeb, instagram, facebook,
-      marcaAguaTexto,
+      marcaAguaTexto, cuotaDiaFinBonificado, cuotaDiaFinNormal,
+      cuotaBonifTipo, cuotaBonifValor, cuotaRecargoTipo, cuotaRecargoValor,
     } = req.body;
+
+    // Regla general de descuento / recargo (cada lado se manda con su tipo)
+    const regla: Record<string, any> = {};
+    if (cuotaBonifTipo !== undefined) {
+      const a = parsearAjuste(cuotaBonifTipo, cuotaBonifValor, 'Descuento', false);
+      if (typeof a === 'string') { res.status(400).json(err(a)); return; }
+      regla.cuotaBonifTipo = a.tipo; regla.cuotaBonifValor = a.valor;
+    }
+    if (cuotaRecargoTipo !== undefined) {
+      const a = parsearAjuste(cuotaRecargoTipo, cuotaRecargoValor, 'Recargo', false);
+      if (typeof a === 'string') { res.status(400).json(err(a)); return; }
+      regla.cuotaRecargoTipo = a.tipo; regla.cuotaRecargoValor = a.valor;
+    }
+
+    // Días de corte de la cuota mensual: 1 <= bonificado < normal <= 28
+    if (cuotaDiaFinBonificado !== undefined || cuotaDiaFinNormal !== undefined) {
+      const actual = await prisma.empresa.findUniqueOrThrow({
+        where: { id: req.empresaId }, select: { cuotaDiaFinBonificado: true, cuotaDiaFinNormal: true },
+      });
+      const bon = cuotaDiaFinBonificado !== undefined ? Number(cuotaDiaFinBonificado) : actual.cuotaDiaFinBonificado;
+      const nor = cuotaDiaFinNormal     !== undefined ? Number(cuotaDiaFinNormal)     : actual.cuotaDiaFinNormal;
+      if (!Number.isInteger(bon) || !Number.isInteger(nor) || bon < 1 || bon >= nor || nor > 28) {
+        res.status(400).json(err('Días de cuota inválidos: el bonificado va del 1 al día de corte, y el normal hasta el 28 como máximo'));
+        return;
+      }
+    }
+
     const empresa = await prisma.empresa.update({
       where: { id: req.empresaId },
       data: {
@@ -462,6 +571,9 @@ router.patch('/empresa', auth, rbac('configuracion.editar'), async (req: any, re
         ...(instagram       !== undefined && { instagram }),
         ...(facebook        !== undefined && { facebook }),
         ...(marcaAguaTexto  !== undefined && { marcaAguaTexto }),
+        ...(cuotaDiaFinBonificado !== undefined && { cuotaDiaFinBonificado: Number(cuotaDiaFinBonificado) }),
+        ...(cuotaDiaFinNormal     !== undefined && { cuotaDiaFinNormal:     Number(cuotaDiaFinNormal) }),
+        ...regla,
       },
     });
     res.json(ok(empresa, 'Configuración actualizada'));

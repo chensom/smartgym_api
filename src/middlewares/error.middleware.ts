@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { env } from '../config/env';
+import { esHttpError } from '../lib/httpError';
 
 export const errorHandler = (
   error: Error,
@@ -9,6 +10,14 @@ export const errorHandler = (
   res:   Response,
   next:  NextFunction
 ): void => {
+  // Errores de negocio esperados (HttpError o { status: 4xx }): se responden
+  // con su código y mensaje, sin ensuciar el log de errores ni Sentry.
+  if (esHttpError(error)) {
+    logger.warn(error.message, { url: req.url, method: req.method, status: (error as any).status });
+    res.status((error as any).status).json({ ok: false, error: error.message });
+    return;
+  }
+
   logger.error(error.message, { stack: error.stack, url: req.url, method: req.method });
 
   // findFirstOrThrow / findUniqueOrThrow tiran esta clase específica cuando no

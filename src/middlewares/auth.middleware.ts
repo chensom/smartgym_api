@@ -20,7 +20,16 @@ export const auth = (req: Request, res: Response, next: NextFunction): void => {
 
   const token = header.split(' ')[1];
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload & { typ?: string };
+
+    // Solo tokens de ACCESO de un gimnasio. El refresh token (y el del
+    // superadmin) se firman con el mismo secreto pero no traen empresaId:
+    // si se aceptaban acá, req.empresaId quedaba undefined y Prisma ignoraba
+    // el filtro `empresaId: undefined` -> se veían datos de TODOS los gimnasios.
+    if (!payload.empresaId || payload.typ === 'refresh') {
+      res.status(401).json(err('Token inválido'));
+      return;
+    }
     req.user      = payload;
     req.empresaId = payload.empresaId;
 

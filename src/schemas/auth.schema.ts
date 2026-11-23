@@ -4,7 +4,6 @@ export const loginSchema = z.object({
   email:       z.string().email('Email inválido'),
   password:    z.string().min(6, 'Mínimo 6 caracteres'),
   empresaSlug: z.string().min(1).max(60).optional(),
-  turnstileToken: z.string().min(1, 'Verificación anti-bot requerida'),
 });
 
 export const refreshSchema = z.object({

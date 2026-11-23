@@ -4,11 +4,24 @@ import { auth } from '../middlewares/auth.middleware';
 import { rbac } from '../middlewares/rbac.middleware';
 import { prisma } from '../lib/prisma';
 import { ok, err } from '../types/api.types';
+import { validate } from '../middlewares/validate.middleware';
+import { z } from 'zod';
+import { evaluarMembresia, includeMembresia } from '../services/asistencias.service';
+import { hoyArgentina, deFechaDB, diasEntre } from '../lib/fechas';
 
 const router = Router();
 router.use(auth);
 
 router.post('/qr',          rbac('asistencias.registrar'), asistenciasController.registrarQR);
+
+// Kiosco de autoservicio. El usuario del kiosco solo necesita asistencias.registrar.
+const kioscoSchema = z.object({
+  codigo:      z.string().trim().min(1).max(100),
+  sucursalId:  z.string().uuid(),
+  dispositivo: z.string().trim().max(60).optional(),
+}).strict();
+router.get('/kiosco/config', rbac('asistencias.registrar'), asistenciasController.configKiosco);
+router.post('/kiosco',       rbac('asistencias.registrar'), validate(kioscoSchema), asistenciasController.registrarKiosco);
 router.post('/manual',      rbac('asistencias.registrar'), asistenciasController.registrarManual);
 router.patch('/:id/egreso', rbac('asistencias.registrar'), asistenciasController.registrarEgreso);
 router.get('/',             rbac('asistencias.ver'),       asistenciasController.listar);
@@ -34,11 +47,8 @@ router.get('/buscar-dni/:dni', rbac('asistencias.ver'), async (req: any, res, ne
           where: { fechaBaja: null },
           include: {
             tipoRol: { select: { nombre: true } },
-            inscripciones: {
-              orderBy: { fechaFin: 'desc' },
-              take: 1,
-              include: { plan: { select: { nombre: true } } },
-            },
+            // Membresía actual: excluye las cerradas por cambio de plan / canceladas
+            inscripciones: includeMembresia,
           },
         },
       },
@@ -54,12 +64,15 @@ router.get('/buscar-dni/:dni', rbac('asistencias.ver'), async (req: any, res, ne
     // Solo los SOCIOS necesitan una membresía activa para ingresar; profesores,
     // empleados, etc. pueden marcar asistencia libremente.
     const requiereMembresia = tipoRolNombre === 'SOCIO';
-    const hoy           = new Date();
-    const vencimiento   = inscripcion ? new Date(inscripcion.fechaFin) : null;
+    // Fechas como día calendario argentino (antes: new Date() en UTC dejaba
+    // al socio "vencido" todo su último día).
+    const hoy           = hoyArgentina();
+    const vencimiento   = inscripcion ? deFechaDB(inscripcion.fechaFin) : null;
     const activo        = vencimiento ? vencimiento >= hoy : false;
-    const diasRestantes = vencimiento
-      ? Math.ceil((vencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
-      : null;
+    const diasRestantes = vencimiento ? diasEntre(hoy, vencimiento) : null;
+    const { aviso }     = requiereMembresia
+      ? await evaluarMembresia(req.empresaId, inscripcion ?? null, hoy)
+      : { aviso: null };
 
     res.json(ok({
       persona: {
@@ -84,6 +97,7 @@ router.get('/buscar-dni/:dni', rbac('asistencias.ver'), async (req: any, res, ne
         activo,
         diasRestantes,
       } : null,
+      aviso, // { tipo, nivel, mensaje, cuotaHoy? } o null — el ingreso se permite igual
     }));
   } catch (e) { next(e); }
 });
