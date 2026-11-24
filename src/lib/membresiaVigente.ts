@@ -36,3 +36,20 @@ export function pendienteSiguiente<T extends InsMin & { id: string }>(lista: T[]
   if (!lista?.length || elegida?.estado === 'PENDIENTE') return null;
   return lista.find(i => i.id !== elegida?.id && i.estado === 'PENDIENTE' && deFechaDB(i.fechaInicio) > hoy) ?? null;
 }
+
+// Estado de la cuota para mostrar (mismo criterio que el CASE de estadoCuota.service.ts).
+export const DIAS_POR_VENCER_LISTA = 7;
+export type EstadoCuotaCodigo = 'AL_DIA' | 'POR_VENCER' | 'VENCIDA' | 'SIN_MEMBRESIA' | 'PENDIENTE' | 'SUSPENDIDA';
+
+export function clasificarCuota(elegida: InsMin | null, hoy: string): EstadoCuotaCodigo {
+  if (!elegida) return 'SIN_MEMBRESIA';
+  if (elegida.estado === 'SUSPENDIDA') return 'SUSPENDIDA';
+  if (elegida.estado === 'PENDIENTE')  return 'PENDIENTE';
+  const fin = deFechaDB(elegida.fechaFin);
+  if (elegida.estado === 'VENCIDA' || fin < hoy) return 'VENCIDA';
+  return diasEntreISO(hoy, fin) <= DIAS_POR_VENCER_LISTA ? 'POR_VENCER' : 'AL_DIA';
+}
+
+function diasEntreISO(a: string, b: string): number {
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86_400_000);
+}

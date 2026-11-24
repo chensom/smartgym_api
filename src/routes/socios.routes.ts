@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma';
 import { ok, err, paginate } from '../types/api.types';
 import { z } from 'zod';
 import { listarPorEstadoCuota, ESTADOS_CUOTA } from '../services/estadoCuota.service';
+import { cuotasDelSocio, asistenciasDelSocio, NoEncontrado } from '../services/socioFicha.service';
 
 const estadoCuotaQuerySchema = z.object({
   estado: z.enum(ESTADOS_CUOTA).optional(),
@@ -32,6 +33,26 @@ router.get('/estado-cuota', rbac('socios.ver'), validate(estadoCuotaQuerySchema,
                 undefined, paginate(r.total, page, limit)));
   } catch (e) { next(e); }
 });
+// Ficha del socio: historial completo de cuotas con sus pagos, y sus asistencias.
+const paginaSchema = z.object({
+  page:  z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(24),
+});
+function fichaHandler(fn: (empresaId: string, id: string, page: number, limit: number) => Promise<any>) {
+  return async (req: any, res: any, next: any) => {
+    try {
+      const { page, limit } = req.query;
+      const r = await fn(req.empresaId!, req.params.id, page, limit);
+      res.json(ok(r, undefined, paginate(r.total, page, limit)));
+    } catch (e) {
+      if (e instanceof NoEncontrado) { res.status(404).json(err('Socio no encontrado')); return; }
+      next(e);
+    }
+  };
+}
+router.get('/:id/cuotas',      rbac('inscripciones.ver'), validate(idParamSchema, 'params'), validate(paginaSchema, 'query'), fichaHandler(cuotasDelSocio));
+router.get('/:id/asistencias', rbac('asistencias.ver'),   validate(idParamSchema, 'params'), validate(paginaSchema, 'query'), fichaHandler(asistenciasDelSocio));
+
 router.get('/:id',   rbac('socios.ver'),      validate(idParamSchema, 'params'), sociosController.obtener);
 router.post('/',     rbac('socios.crear'),    validate(crearPersonaSchema),       sociosController.crear);
 router.patch('/:id', rbac('socios.editar'),   validate(idParamSchema, 'params'),
