@@ -43,9 +43,11 @@ export const sociosController = {
       const empresaId = req.empresaId!;
       const { nombres, apellidos, fechaNacimiento, genero, fotoUrl, documentos, contactos } = req.body;
 
-      await prisma.$transaction(async (tx) => {
-        const anterior = await tx.persona.findFirst({ where: { id, empresaId } });
+      // Aislamiento entre gimnasios: la persona tiene que ser de este gimnasio.
+      const anterior = await prisma.persona.findFirst({ where: { id, empresaId } });
+      if (!anterior) { res.status(404).json(err('Socio no encontrado')); return; }
 
+      await prisma.$transaction(async (tx) => {
         const actualizado = await tx.persona.update({
           where: { id },
           data: {
@@ -66,7 +68,8 @@ export const sociosController = {
           });
           for (const doc of documentos) {
             if (doc.id) {
-              await tx.personaDocumento.update({ where: { id: doc.id }, data: { tipo: doc.tipo, numero: doc.numero } });
+              // updateMany con personaId: solo toca documentos de ESTA persona
+              await tx.personaDocumento.updateMany({ where: { id: doc.id, personaId: id }, data: { tipo: doc.tipo, numero: doc.numero } });
             } else {
               await tx.personaDocumento.create({ data: { personaId: id, tipo: doc.tipo, numero: doc.numero } });
             }
@@ -80,7 +83,7 @@ export const sociosController = {
           });
           for (const cont of contactos) {
             if (cont.id) {
-              await tx.personaContacto.update({ where: { id: cont.id }, data: { tipo: cont.tipo, valor: cont.valor, principal: cont.principal } });
+              await tx.personaContacto.updateMany({ where: { id: cont.id, personaId: id }, data: { tipo: cont.tipo, valor: cont.valor, principal: cont.principal } });
             } else {
               await tx.personaContacto.create({ data: { personaId: id, tipo: cont.tipo, valor: cont.valor, principal: cont.principal ?? false } });
             }

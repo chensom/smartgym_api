@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { inventarioService } from '../services/inventario.service';
 import { ok, err, paginate } from '../types/api.types';
 import { z } from 'zod';
+import { prisma } from '../lib/prisma';
+import { refsAjenas } from '../lib/delGimnasio';
 
 const movimientoSchema = z.object({
   proveedorId: z.string().uuid().optional(),
@@ -38,6 +40,12 @@ export const inventarioController = {
         res.status(422).json({ ok: false, error: 'Datos inválidos', issues: parsed.error.issues });
         return;
       }
+      const ajena = await refsAjenas(req.empresaId!, {
+        sucursalId:  parsed.data.sucursalId,
+        productoIds: [parsed.data.productoId],
+        proveedorId: parsed.data.proveedorId,
+      });
+      if (ajena) { res.status(404).json(err(ajena)); return; }
       const mov = await inventarioService.registrarMovimiento({
         ...parsed.data,
         usuarioId: req.user!.sub,
@@ -78,6 +86,8 @@ export const inventarioController = {
         res.status(422).json({ ok: false, error: 'nombre, categoriaId y precioVenta son requeridos' });
         return;
       }
+      const ajena = await refsAjenas(req.empresaId!, { categoriaId, marcaId, proveedorId });
+      if (ajena) { res.status(404).json(err(ajena)); return; }
       const producto = await inventarioService.crearProducto(req.empresaId!, {
         nombre, codigo, categoriaId, marcaId, proveedorId,
         precioVenta: parseFloat(precioVenta),
@@ -101,7 +111,13 @@ export const inventarioController = {
       if (precioCosto !== undefined) data.precioCosto = precioCosto ? parseFloat(precioCosto) : null;
       if (activo      !== undefined) data.activo = activo;
 
-      const producto = await inventarioService.actualizarProducto(req.params.id, data);
+      // Aislamiento entre gimnasios: el producto y lo que se le asigna tienen que ser propios.
+      const existente = await prisma.producto.findFirst({ where: { id: req.params.id, empresaId: req.empresaId! }, select: { id: true } });
+      if (!existente) { res.status(404).json(err('Producto no encontrado')); return; }
+      const ajena = await refsAjenas(req.empresaId!, { categoriaId, marcaId, proveedorId: req.body.proveedorId });
+      if (ajena) { res.status(404).json(err(ajena)); return; }
+
+      const producto = await inventarioService.actualizarProducto(existente.id, data);
       res.json(ok(producto, 'Producto actualizado'));
     } catch (e) { next(e); }
   },

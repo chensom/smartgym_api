@@ -13,6 +13,18 @@ const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábad
 const fh = (d: Date): string =>
   `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;
 
+// Aislamiento entre gimnasios: disciplina, sucursal y profesor que vienen en
+// el body tienen que ser del mismo gimnasio. Devuelve el error o null.
+async function refsAjenas(empresaId: string, b: { disciplinaId?: string; sucursalId?: string; profesorRolId?: string }) {
+  if (b.disciplinaId && !(await prisma.disciplina.findFirst({ where: { id: b.disciplinaId, empresaId }, select: { id: true } })))
+    return 'Disciplina no encontrada';
+  if (b.sucursalId && !(await prisma.sucursal.findFirst({ where: { id: b.sucursalId, empresaId }, select: { id: true } })))
+    return 'Sucursal no encontrada';
+  if (b.profesorRolId && !(await prisma.personaRol.findFirst({ where: { id: b.profesorRolId, persona: { empresaId } }, select: { id: true } })))
+    return 'Profesor no encontrado';
+  return null;
+}
+
 const formatHorario = (h: any) => ({
   ...h,
   diaNombre:  DIAS[h.diaSemana],
@@ -48,7 +60,7 @@ router.get('/', rbac('socios.ver'), async (req: any, res, next) => {
 router.get('/socio/:personaRolId', rbac('socios.ver'), async (req: any, res, next) => {
   try {
     const inscripciones = await prisma.inscripcionClase.findMany({
-      where: { personaRolId: req.params.personaRolId, activo: true },
+      where: { personaRolId: req.params.personaRolId, activo: true, horario: { empresaId: req.empresaId } },
       include: {
         horario: {
           include: {
@@ -100,6 +112,8 @@ router.post('/', rbac('configuracion.editar'), async (req: any, res, next) => {
       res.status(400).json(err('disciplinaId, sucursalId, diaSemana, horaInicio y horaFin son requeridos'));
       return;
     }
+    const ajena = await refsAjenas(req.empresaId, { disciplinaId, sucursalId, profesorRolId });
+    if (ajena) { res.status(404).json(err(ajena)); return; }
     const horario = await prisma.horarioClase.create({
       data: {
         empresaId:     req.empresaId,
@@ -133,7 +147,12 @@ router.patch('/:id', rbac('configuracion.editar'), async (req: any, res, next) =
     if (nombre        !== undefined) data.nombre        = nombre || null;
     if (activo        !== undefined) data.activo        = activo;
 
-    const horario = await prisma.horarioClase.update({ where: { id: req.params.id }, data });
+    const existente = await prisma.horarioClase.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Horario no encontrado')); return; }
+    const ajena = await refsAjenas(req.empresaId, { disciplinaId, sucursalId, profesorRolId });
+    if (ajena) { res.status(404).json(err(ajena)); return; }
+
+    const horario = await prisma.horarioClase.update({ where: { id: existente.id }, data });
     res.json(ok({ ...horario, horaInicio: fh(horario.horaInicio), horaFin: fh(horario.horaFin) }, 'Horario actualizado'));
   } catch (e) { next(e); }
 });
@@ -141,7 +160,9 @@ router.patch('/:id', rbac('configuracion.editar'), async (req: any, res, next) =
 // DELETE /api/v1/horarios/:id
 router.delete('/:id', rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
-    await prisma.horarioClase.update({ where: { id: req.params.id }, data: { activo: false } });
+    const existente = await prisma.horarioClase.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Horario no encontrado')); return; }
+    await prisma.horarioClase.update({ where: { id: existente.id }, data: { activo: false } });
     res.json(ok(null, 'Horario eliminado'));
   } catch (e) { next(e); }
 });
@@ -151,6 +172,11 @@ router.post('/:id/inscribir', rbac('socios.editar'), async (req: any, res, next)
   try {
     const { personaRolId } = req.body;
     if (!personaRolId) { res.status(400).json(err('personaRolId requerido')); return; }
+
+    const horarioPropio = await prisma.horarioClase.findFirst({ where: { id: req.params.id, empresaId: req.empresaId }, select: { id: true } });
+    if (!horarioPropio) { res.status(404).json(err('Horario no encontrado')); return; }
+    const socioPropio = await prisma.personaRol.findFirst({ where: { id: personaRolId, persona: { empresaId: req.empresaId } }, select: { id: true } });
+    if (!socioPropio) { res.status(404).json(err('Socio no encontrado')); return; }
 
     const existente = await prisma.inscripcionClase.findUnique({
       where: { horarioId_personaRolId: { horarioId: req.params.id, personaRolId } },
@@ -176,8 +202,10 @@ router.post('/:id/inscribir', rbac('socios.editar'), async (req: any, res, next)
 // DELETE /api/v1/horarios/:id/inscribir/:personaRolId
 router.delete('/:id/inscribir/:personaRolId', rbac('socios.editar'), async (req: any, res, next) => {
   try {
+    const horarioPropio = await prisma.horarioClase.findFirst({ where: { id: req.params.id, empresaId: req.empresaId }, select: { id: true } });
+    if (!horarioPropio) { res.status(404).json(err('Horario no encontrado')); return; }
     await prisma.inscripcionClase.updateMany({
-      where: { horarioId: req.params.id, personaRolId: req.params.personaRolId },
+      where: { horarioId: horarioPropio.id, personaRolId: req.params.personaRolId },
       data:  { activo: false, fechaBaja: new Date() },
     });
     res.json(ok(null, 'Socio desanotado del horario'));

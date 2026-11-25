@@ -50,7 +50,7 @@ router.get('/', rbac('rutinas.ver'), async (req: any, res, next) => {
 router.get('/socio/:personaRolId', rbac('rutinas.ver'), async (req: any, res, next) => {
   try {
     const asignacion = await prisma.socioRutina.findFirst({
-      where: { personaRolId: req.params.personaRolId, activo: true },
+      where: { personaRolId: req.params.personaRolId, activo: true, rutina: { empresaId: req.empresaId } },
       include: {
         rutina: {
           include: {
@@ -138,6 +138,11 @@ router.post('/:id/ejercicios', rbac('rutinas.editar'), async (req: any, res, nex
       res.status(400).json(err('ejercicioId, diaNumero, series y repeticiones son requeridos'));
       return;
     }
+    // El ejercicio tiene que ser de la biblioteca global (empresaId null) o de este gimnasio
+    const ejercicioOk = await prisma.ejercicio.findFirst({
+      where: { id: ejercicioId, OR: [{ empresaId: null }, { empresaId: req.empresaId }] }, select: { id: true },
+    });
+    if (!ejercicioOk) { res.status(404).json(err('Ejercicio no encontrado')); return; }
 
     // El orden dentro del día se calcula solo (siguiente lugar disponible)
     const ultimo = await prisma.rutinaEjercicio.findFirst({
@@ -171,9 +176,12 @@ router.patch('/:id/ejercicios/:itemId', rbac('rutinas.editar'), async (req: any,
     const rutina = await prisma.rutina.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
     if (!rutina) { res.status(404).json(err('Rutina no encontrada')); return; }
 
+    const existente = await prisma.rutinaEjercicio.findFirst({ where: { id: req.params.itemId, rutinaId: rutina.id }, select: { id: true } });
+    if (!existente) { res.status(404).json(err('Ejercicio no encontrado en la rutina')); return; }
+
     const { series, repeticiones, descansoSeg, observaciones } = req.body;
     const item = await prisma.rutinaEjercicio.update({
-      where: { id: req.params.itemId },
+      where: { id: existente.id },
       data: {
         ...(series !== undefined && { series: Number(series) }),
         ...(repeticiones !== undefined && { repeticiones: String(repeticiones) }),
@@ -190,7 +198,9 @@ router.delete('/:id/ejercicios/:itemId', rbac('rutinas.editar'), async (req: any
   try {
     const rutina = await prisma.rutina.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
     if (!rutina) { res.status(404).json(err('Rutina no encontrada')); return; }
-    await prisma.rutinaEjercicio.delete({ where: { id: req.params.itemId } });
+    const existente = await prisma.rutinaEjercicio.findFirst({ where: { id: req.params.itemId, rutinaId: rutina.id }, select: { id: true } });
+    if (!existente) { res.status(404).json(err('Ejercicio no encontrado en la rutina')); return; }
+    await prisma.rutinaEjercicio.delete({ where: { id: existente.id } });
     res.json(ok(null, 'Ejercicio quitado de la rutina'));
   } catch (e) { next(e); }
 });
@@ -205,6 +215,14 @@ router.post('/:id/asignar', rbac('rutinas.editar'), async (req: any, res, next) 
 
     const { personaRolId, profesorRolId, fechaInicio, fechaFin } = req.body;
     if (!personaRolId || !fechaInicio) { res.status(400).json(err('personaRolId y fechaInicio son requeridos')); return; }
+
+    // Socio y profesor tienen que ser de este gimnasio
+    const socioOk = await prisma.personaRol.findFirst({ where: { id: personaRolId, persona: { empresaId: req.empresaId } }, select: { id: true } });
+    if (!socioOk) { res.status(404).json(err('Socio no encontrado')); return; }
+    if (profesorRolId) {
+      const profeOk = await prisma.personaRol.findFirst({ where: { id: profesorRolId, persona: { empresaId: req.empresaId } }, select: { id: true } });
+      if (!profeOk) { res.status(404).json(err('Profesor no encontrado')); return; }
+    }
 
     // Desactiva cualquier rutina previa activa de este socio (solo una activa a la vez)
     await prisma.socioRutina.updateMany({
@@ -229,8 +247,12 @@ router.post('/:id/asignar', rbac('rutinas.editar'), async (req: any, res, next) 
 // DELETE /api/v1/rutinas/asignaciones/:socioRutinaId — desasignar
 router.delete('/asignaciones/:socioRutinaId', rbac('rutinas.editar'), async (req: any, res, next) => {
   try {
+    const existente = await prisma.socioRutina.findFirst({
+      where: { id: req.params.socioRutinaId, rutina: { empresaId: req.empresaId } }, select: { id: true },
+    });
+    if (!existente) { res.status(404).json(err('Asignación no encontrada')); return; }
     await prisma.socioRutina.update({
-      where: { id: req.params.socioRutinaId },
+      where: { id: existente.id },
       data:  { activo: false, fechaFin: new Date() },
     });
     res.json(ok(null, 'Rutina desasignada'));

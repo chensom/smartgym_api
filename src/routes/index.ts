@@ -306,7 +306,9 @@ router.patch('/medios-pago/:id', auth, rbac('configuracion.editar'), async (req:
     if (nombre !== undefined) data.nombre = nombre;
     if (tipo   !== undefined) data.tipo   = tipo;
     if (activo !== undefined) data.activo = activo;
-    const medio = await prisma.medioPago.update({ where: { id: req.params.id }, data });
+    const existente = await prisma.medioPago.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Medio de pago no encontrado')); return; }
+    const medio = await prisma.medioPago.update({ where: { id: existente.id }, data });
     res.json(ok(medio, 'Medio de pago actualizado'));
   } catch (e) { next(e); }
 });
@@ -349,7 +351,9 @@ router.post('/marcas', auth, rbac('configuracion.editar'), async (req: any, res,
 
 router.patch('/marcas/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
-    const marca = await prisma.marca.update({ where: { id: req.params.id }, data: { nombre: req.body.nombre } });
+    const existente = await prisma.marca.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Marca no encontrada')); return; }
+    const marca = await prisma.marca.update({ where: { id: existente.id }, data: { nombre: req.body.nombre } });
     res.json(ok(marca));
   } catch (e) { next(e); }
 });
@@ -374,7 +378,9 @@ router.post('/categorias', auth, rbac('configuracion.editar'), async (req: any, 
 
 router.patch('/categorias/:id', auth, rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
-    const cat = await prisma.categoriaProducto.update({ where: { id: req.params.id }, data: { nombre: req.body.nombre } });
+    const existente = await prisma.categoriaProducto.findFirst({ where: { id: req.params.id, empresaId: req.empresaId } });
+    if (!existente) { res.status(404).json(err('Categoría no encontrada')); return; }
+    const cat = await prisma.categoriaProducto.update({ where: { id: existente.id }, data: { nombre: req.body.nombre } });
     res.json(ok(cat, 'Categoría actualizada'));
   } catch (e) { next(e); }
 });

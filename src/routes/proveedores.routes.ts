@@ -71,7 +71,9 @@ router.patch('/:id', rbac('configuracion.editar'), async (req: any, res, next) =
     if (direccion   !== undefined) data.direccion = direccion;
     if (notas       !== undefined) data.notas = notas;
     if (activo      !== undefined) data.activo = activo;
-    const proveedor = await prisma.proveedor.update({ where: { id: req.params.id }, data });
+    const existente = await prisma.proveedor.findFirst({ where: { id: req.params.id, empresaId: req.empresaId, deletedAt: null } });
+    if (!existente) { res.status(404).json(err('Proveedor no encontrado')); return; }
+    const proveedor = await prisma.proveedor.update({ where: { id: existente.id }, data });
     res.json(ok(proveedor, 'Proveedor actualizado'));
   } catch (e) { next(e); }
 });
@@ -79,8 +81,10 @@ router.patch('/:id', rbac('configuracion.editar'), async (req: any, res, next) =
 // DELETE /api/v1/proveedores/:id (soft delete)
 router.delete('/:id', rbac('configuracion.editar'), async (req: any, res, next) => {
   try {
+    const existente = await prisma.proveedor.findFirst({ where: { id: req.params.id, empresaId: req.empresaId, deletedAt: null } });
+    if (!existente) { res.status(404).json(err('Proveedor no encontrado')); return; }
     await prisma.proveedor.update({
-      where: { id: req.params.id },
+      where: { id: existente.id },
       data:  { deletedAt: new Date(), activo: false },
     });
     res.json(ok(null, 'Proveedor eliminado'));

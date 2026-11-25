@@ -73,7 +73,7 @@ router.patch('/:id/rol', rbac('socios.editar'), async (req: any, res, next) => {
 
     // Actualizar el rol activo de la persona
     const rolActual = await prisma.personaRol.findFirst({
-      where: { personaId: req.params.id, fechaBaja: null },
+      where: { personaId: req.params.id, fechaBaja: null, persona: { empresaId: req.empresaId } },
     });
     if (!rolActual) { res.status(404).json(err('La persona no tiene un rol activo')); return; }
 

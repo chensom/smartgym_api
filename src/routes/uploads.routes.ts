@@ -22,8 +22,29 @@ const storageEmpresa = new CloudinaryStorage({
 })
 const uploadEmpresa = multer({ storage: storageEmpresa, limits: { fileSize: 5 * 1024 * 1024 } })
 
+// ── Aislamiento entre gimnasios ────────────────────────────────────────────
+// Antes de subir o borrar, confirmamos que el registro (:id) es del gimnasio
+// del usuario. Va ANTES de multer para no subir nada a Cloudinary si no es suyo.
+// Los ejercicios globales (empresaId null) no se pueden tocar desde un gimnasio.
+type Modelo = 'persona' | 'producto' | 'ejercicio'
+const NO_ENCONTRADO: Record<Modelo, string> = {
+  persona: 'Persona no encontrada', producto: 'Producto no encontrado', ejercicio: 'Ejercicio no encontrado',
+}
+function delGimnasio(modelo: Modelo) {
+  return async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const where = { id: req.params.id, empresaId: req.empresaId }
+      const existe = modelo === 'persona'  ? await prisma.persona.findFirst({ where, select: { id: true } })
+                   : modelo === 'producto' ? await prisma.producto.findFirst({ where, select: { id: true } })
+                   :                         await prisma.ejercicio.findFirst({ where, select: { id: true } })
+      if (!existe) { res.status(404).json(err(NO_ENCONTRADO[modelo])); return }
+      next()
+    } catch (e) { next(e) }
+  }
+}
+
 // ── Personas ───────────────────────────────────────────────────────────────
-router.post('/persona/:id', rbac('socios.editar'), uploadPersona.single('foto'),
+router.post('/persona/:id', rbac('socios.editar'), delGimnasio('persona'), uploadPersona.single('foto'),
   async (req: any, res: Response, next: NextFunction) => {
     try {
       if (!req.file) { res.status(400).json(err('No se recibió ningún archivo')); return }
@@ -34,7 +55,7 @@ router.post('/persona/:id', rbac('socios.editar'), uploadPersona.single('foto'),
   }
 )
 
-router.delete('/persona/:id', rbac('socios.editar'), async (req: any, res, next) => {
+router.delete('/persona/:id', rbac('socios.editar'), delGimnasio('persona'), async (req: any, res, next) => {
   try {
     const persona = await prisma.persona.findUnique({ where: { id: req.params.id }, select: { fotoUrl: true } })
     if (persona?.fotoUrl) {
@@ -47,7 +68,7 @@ router.delete('/persona/:id', rbac('socios.editar'), async (req: any, res, next)
 })
 
 // ── Productos ──────────────────────────────────────────────────────────────
-router.post('/producto/:id', rbac('inventario.ajustar'), uploadProducto.single('imagen'),
+router.post('/producto/:id', rbac('inventario.ajustar'), delGimnasio('producto'), uploadProducto.single('imagen'),
   async (req: any, res: Response, next: NextFunction) => {
     try {
       if (!req.file) { res.status(400).json(err('No se recibió ningún archivo')); return }
@@ -58,7 +79,7 @@ router.post('/producto/:id', rbac('inventario.ajustar'), uploadProducto.single('
   }
 )
 
-router.delete('/producto/:id', rbac('inventario.ajustar'), async (req: any, res, next) => {
+router.delete('/producto/:id', rbac('inventario.ajustar'), delGimnasio('producto'), async (req: any, res, next) => {
   try {
     const producto = await prisma.producto.findUnique({ where: { id: req.params.id }, select: { imagenUrl: true } })
     if (producto?.imagenUrl) {
@@ -71,7 +92,7 @@ router.delete('/producto/:id', rbac('inventario.ajustar'), async (req: any, res,
 })
 
 // ── Ejercicios (biblioteca de rutinas) ────────────────────────────────────
-router.post('/ejercicio/:id', rbac('rutinas.editar'), uploadEjercicio.single('imagen'),
+router.post('/ejercicio/:id', rbac('rutinas.editar'), delGimnasio('ejercicio'), uploadEjercicio.single('imagen'),
   async (req: any, res: Response, next: NextFunction) => {
     try {
       if (!req.file) { res.status(400).json(err('No se recibió ningún archivo')); return }
@@ -82,7 +103,7 @@ router.post('/ejercicio/:id', rbac('rutinas.editar'), uploadEjercicio.single('im
   }
 )
 
-router.delete('/ejercicio/:id', rbac('rutinas.editar'), async (req: any, res, next) => {
+router.delete('/ejercicio/:id', rbac('rutinas.editar'), delGimnasio('ejercicio'), async (req: any, res, next) => {
   try {
     const ejercicio = await prisma.ejercicio.findUnique({ where: { id: req.params.id }, select: { imagenUrl: true } })
     if (ejercicio?.imagenUrl) {

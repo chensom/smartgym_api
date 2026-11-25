@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ventasService } from '../services/ventas.service';
 import { ok, err, paginate } from '../types/api.types';
+import { refsAjenas } from '../lib/delGimnasio';
 
 export const ventasController = {
 
@@ -27,6 +28,16 @@ export const ventasController = {
 
   async crear(req: Request, res: Response, next: NextFunction) {
     try {
+      // Aislamiento entre gimnasios: sucursal, productos, cliente y medio de pago
+      // tienen que ser de este gimnasio (si no, se descontaba stock de otro).
+      const b = req.body ?? {};
+      const ajena = await refsAjenas(req.empresaId!, {
+        sucursalId:  b.sucursalId,
+        productoIds: (b.detalles ?? []).map((d: any) => d?.productoId),
+        personaId:   b.personaId,
+        medioPagoId: b.pago?.medioPagoId,
+      });
+      if (ajena) { res.status(404).json(err(ajena)); return; }
       const venta = await ventasService.crear(req.empresaId!, req.user!.sub, req.body);
       res.status(201).json(ok(venta, 'Venta registrada'));
     } catch (e: any) {
