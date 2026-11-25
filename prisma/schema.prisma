@@ -81,6 +81,7 @@ model Empresa {
   rutinas          Rutina[]
   gastos           Gasto[]
   cierresCaja      CierreCaja[]
+  resumenes        ResumenEnviado[]
 
   @@map("empresas")
 }
@@ -1119,4 +1120,25 @@ model CierreCaja {
   @@unique([sucursalId, fecha])
   @@index([empresaId, fecha(sort: Desc)])
   @@map("cierres_caja")
+}
+
+// Resumen mensual por mail al dueño (jobs/resumen.job.ts). Una fila por gimnasio y
+// mes: evita mandarlo dos veces (reinicio de pm2) y permite reintentar si falló.
+// estado: ENVIANDO | ENVIADO | ERROR | SIN_DESTINATARIOS
+model ResumenEnviado {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String    @map("empresa_id") @db.Uuid
+  periodo       DateTime  @db.Date
+  estado        String    @db.VarChar(20)
+  intentos      Int       @default(1) @db.SmallInt
+  destinatarios String?
+  error         String?
+  enviadoAt     DateTime? @map("enviado_at") @db.Timestamptz()
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@unique([empresaId, periodo])
+  @@map("resumenes_enviados")
 }
