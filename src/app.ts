@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
+import { limiteAnonimo, limiteLogueado, limiteLogin } from './middlewares/rateLimit.middleware';
 import { env } from './config/env';
 import { logger } from './lib/logger';
 import routes from './routes';
@@ -27,18 +27,11 @@ app.use(cors({
   credentials: true,
   methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }));
-// ── Rate limiting ─────────────────────────────────────────────────────────────
-app.use(rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max:      env.RATE_LIMIT_MAX,
-  message:  { ok: false, error: 'Demasiadas solicitudes, intentá más tarde' },
-}));
-// Rate limit más estricto para login
-app.use('/api/v1/auth/login', rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 min
-  max:      10,               // 10 intentos
-  message:  { ok: false, error: 'Demasiados intentos de login' },
-}));
+// ── Rate limiting (ver middlewares/rateLimit.middleware.ts) ──────────────────
+app.use(limiteAnonimo);
+app.use(limiteLogueado);
+// Rate limit más estricto para login (solo cuentan los intentos fallidos)
+app.use('/api/v1/auth/login', limiteLogin);
 // ── Parsing & compresión ──────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

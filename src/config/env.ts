@@ -14,5 +14,6 @@ export const env = {
   CORS_ORIGINS:          (process.env.CORS_ORIGINS             || 'http://localhost:5173').split(','),
   RATE_LIMIT_WINDOW_MS:   parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
   RATE_LIMIT_MAX:         parseInt(process.env.RATE_LIMIT_MAX       || '100'),
+  RATE_LIMIT_MAX_AUTH:    parseInt(process.env.RATE_LIMIT_MAX_AUTH  || '3000'),
   SENTRY_DSN:             process.env.SENTRY_DSN || '',
 };
