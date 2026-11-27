@@ -67,7 +67,7 @@ export async function procesarResumenes(opts: { periodo?: string; enviar?: Envia
   const periodo = opts.periodo ?? sumarMeses(periodoDe(hoy), -1);
   const enviar  = opts.enviar ?? enviarEmail;
   const fechaPeriodo = aFechaDB(periodo);
-  const res = { enviados: 0, errores: 0, sinDestinatarios: 0, yaEnviados: 0 };
+  const res = { enviados: 0, errores: 0, sinDestinatarios: 0, yaEnviados: 0, sinSocios: 0 };
 
   const empresas = await prisma.empresa.findMany({
     where:  { activo: true, deletedAt: null },
@@ -75,6 +75,10 @@ export async function procesarResumenes(opts: { periodo?: string; enviar?: Envia
   });
 
   for (const emp of empresas) {
+    // Gimnasio sin ningún socio cargado (en prueba o recién creado): no se le manda un resumen vacío
+    const conSocios = await prisma.persona.findFirst({ where: { empresaId: emp.id, deletedAt: null }, select: { id: true } });
+    if (!conSocios) { res.sinSocios++; console.log(`[RESUMEN] ${emp.nombre}: sin socios, no se manda`); continue; }
+
     // Reservar (gimnasio, mes). Si ya existe, ver si corresponde reintentar.
     const previa = await prisma.resumenEnviado.findUnique({
       where: { empresaId_periodo: { empresaId: emp.id, periodo: fechaPeriodo } },
@@ -124,6 +128,6 @@ export async function procesarResumenes(opts: { periodo?: string; enviar?: Envia
     }
   }
 
-  console.log(`[RESUMEN] Finalizado (${periodo}): ${res.enviados} enviados, ${res.errores} errores, ${res.sinDestinatarios} sin destinatarios, ${res.yaEnviados} ya enviados`);
+  console.log(`[RESUMEN] Finalizado (${periodo}): ${res.enviados} enviados, ${res.errores} errores, ${res.sinDestinatarios} sin destinatarios, ${res.yaEnviados} ya enviados, ${res.sinSocios} sin socios`);
   return res;
 }

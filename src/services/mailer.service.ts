@@ -73,12 +73,19 @@ export async function enviarEmailVencimiento(opts: {
 
 /** Mail genérico (resumen mensual, etc.). El remitente es siempre la cuenta SMTP;
  *  `nombreRemitente` es solo el nombre que se muestra. */
-export async function enviarEmail(opts: { para: string | string[]; asunto: string; html: string; nombreRemitente?: string }) {
+export interface AdjuntoEmail { filename: string; content: Buffer; contentType?: string }
+
+export async function enviarEmail(opts: {
+  para: string | string[]; asunto: string; html: string; nombreRemitente?: string;
+  cco?: string | string[]; adjuntos?: AdjuntoEmail[];
+}) {
   await transporter.sendMail({
     from:    { name: opts.nombreRemitente ?? 'SmartGym', address: process.env.SMTP_USER ?? '' },
     to:      opts.para,
+    bcc:     opts.cco,
     subject: opts.asunto,
     html:    opts.html,
+    attachments: opts.adjuntos,
   });
 }
 

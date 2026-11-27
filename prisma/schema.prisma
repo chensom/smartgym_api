@@ -56,6 +56,14 @@ model Empresa {
   cuotaBonifValor       Decimal @default(0) @map("cuota_bonif_valor") @db.Decimal(12, 2)
   cuotaRecargoTipo      String  @default("NINGUNO") @map("cuota_recargo_tipo") @db.VarChar(12)
   cuotaRecargoValor     Decimal @default(0) @map("cuota_recargo_valor") @db.Decimal(12, 2)
+  // Lo que Cod&Tics le cobra al gimnasio (ver sql/migracion-planes-comerciales.sql)
+  planComercialId String?   @map("plan_comercial_id") @db.Uuid
+  precioAcordado  Decimal?  @map("precio_acordado") @db.Decimal(12, 2)
+  pruebaHasta     DateTime? @map("prueba_hasta") @db.Date
+  pagadoHasta     DateTime? @map("pagado_hasta") @db.Date
+  notasCobro      String?   @map("notas_cobro")
+  condicionIva    String?   @map("condicion_iva") @db.VarChar(25)
+  emailCobro      String?   @map("email_cobro") @db.VarChar(150)
   activo          Boolean   @default(true)
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
@@ -82,7 +90,11 @@ model Empresa {
   gastos           Gasto[]
   cierresCaja      CierreCaja[]
   resumenes        ResumenEnviado[]
+  planComercial    PlanComercial?     @relation(fields: [planComercialId], references: [id], onDelete: Restrict)
+  pagosSuscripcion PagoSuscripcion[]
+  avisosCobro      AvisoCobro[]
 
+  @@index([planComercialId])
   @@map("empresas")
 }
 
@@ -1141,4 +1153,92 @@ model ResumenEnviado {
 
   @@unique([empresaId, periodo])
   @@map("resumenes_enviados")
+}
+
+// =============================================================================
+// Planes comerciales: lo que Cod&Tics cobra a cada gimnasio por usar SmartGym.
+// maxSocios null = sin tope; precioMensual null = "a medida" (usa Empresa.precioAcordado).
+// =============================================================================
+model PlanComercial {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre        String   @unique @db.VarChar(40)
+  maxSocios     Int?     @map("max_socios")
+  precioMensual Decimal? @map("precio_mensual") @db.Decimal(12, 2)
+  orden         Int      @default(0) @db.SmallInt
+  activo        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresas Empresa[]
+  pagos    PagoSuscripcion[]
+
+  @@map("planes_comerciales")
+}
+
+// Pago de un gimnasio a Cod&Tics. No se borra: se anula (anuladoAt).
+model PagoSuscripcion {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  planComercialId String?   @map("plan_comercial_id") @db.Uuid
+  planNombre      String?   @map("plan_nombre") @db.VarChar(40)
+  fechaPago       DateTime  @map("fecha_pago") @db.Date
+  monto           Decimal   @db.Decimal(12, 2)
+  meses           Int       @db.SmallInt
+  periodoDesde    DateTime  @map("periodo_desde") @db.Date
+  periodoHasta    DateTime  @map("periodo_hasta") @db.Date
+  medio           String    @db.VarChar(20)
+  referencia      String?   @db.VarChar(100)
+  notas           String?
+  anuladoAt       DateTime? @map("anulado_at") @db.Timestamptz()
+  anuladoMotivo   String?   @map("anulado_motivo")
+  // Factura (MANUAL = hecha en ARCA a mano y cargada acá; ARCA = por web service)
+  facturaTipo       String?   @map("factura_tipo") @db.Char(1)
+  facturaPuntoVenta Int?      @map("factura_punto_venta")
+  facturaNumero     Int?      @map("factura_numero")
+  facturaFecha      DateTime? @map("factura_fecha") @db.Date
+  facturaCae        String?   @map("factura_cae") @db.VarChar(14)
+  facturaCaeVto     DateTime? @map("factura_cae_vto") @db.Date
+  facturaOrigen     String?   @map("factura_origen") @db.VarChar(6)
+  facturaPdf        Bytes?    @map("factura_pdf")
+  facturaPdfNombre  String?   @map("factura_pdf_nombre") @db.VarChar(120)
+  enviadoAt         DateTime? @map("enviado_at") @db.Timestamptz()
+  enviadoA          String?   @map("enviado_a")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  empresa       Empresa        @relation(fields: [empresaId], references: [id])
+  planComercial PlanComercial? @relation(fields: [planComercialId], references: [id], onDelete: Restrict)
+
+  @@index([empresaId, periodoHasta(sort: Desc)])
+  @@map("pagos_suscripcion")
+}
+
+// Aviso de vencimiento mandado a un gimnasio (no se repite para el mismo "pagado hasta")
+model AvisoCobro {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  tipo          String   @db.VarChar(12)
+  pagadoHasta   DateTime @map("pagado_hasta") @db.Date
+  estado        String   @db.VarChar(20)
+  intentos      Int      @default(1) @db.SmallInt
+  destinatarios String?
+  error         String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@unique([empresaId, tipo, pagadoHasta])
+  @@map("avisos_cobro")
+}
+
+/// Datos de cobro de Cod&Tics editables desde el SuperAdmin (fila única id = 1). Vacío = usar el .env.
+model ConfigCobro {
+  id                 Int      @id @default(1) @db.SmallInt
+  emisorCondicionIva String?  @map("emisor_condicion_iva") @db.VarChar(25)
+  emisorPuntoVenta   Int?     @map("emisor_punto_venta")
+  copiaA             String?  @map("copia_a") @db.VarChar(150)
+  datosPago          String?  @map("datos_pago") @db.VarChar(500)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("config_cobro")
 }

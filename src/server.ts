@@ -6,6 +6,7 @@ import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { iniciarJobAvisos } from './jobs/avisos.job'
 import { iniciarJobResumen } from './jobs/resumen.job'
+import { iniciarJobAvisosCobro } from './jobs/avisosCobro.job'
 
 async function main() {
   // Verificar conexión a la base de datos
@@ -18,6 +19,7 @@ async function main() {
 
   iniciarJobAvisos()
   iniciarJobResumen()
+  iniciarJobAvisosCobro()
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {

@@ -3,6 +3,19 @@ import { prisma } from '../lib/prisma';
 import { ok, err } from '../types/api.types';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import {
+  CobroError, listarPlanes, crearPlan, editarPlan, cuadroCobros, editarCobroEmpresa,
+  listarPagos, registrarPago, anularPago,
+} from '../services/cobros.service';
+import { cargarFactura, obtenerPdfFactura, enviarComprobantePago, MAX_PDF_BYTES, obtenerConfigCobro, guardarConfigCobro } from '../services/facturasSuscripcion.service';
+import multer from 'multer';
+
+// PDF de factura: en memoria (se guarda en la base), solo PDF y hasta 5 MB
+const subirPdf = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: MAX_PDF_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => cb(null, file.mimetype === 'application/pdf'),
+}).single('pdf');
 
 const router = Router();
 
@@ -33,7 +46,11 @@ const superauth = async (req: any, res: any, next: any) => {
   if (!auth?.startsWith('Bearer ')) { res.status(401).json(err('Token requerido')); return; }
   try {
     const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET!) as any;
-    if (payload.rol !== 'SUPERADMIN') { res.status(403).json(err('Acceso denegado')); return; }
+    // Solo el token del login de superadmin: sub fijo y sin gimnasio. (Un token de
+    // "Entrar como admin" lleva el nombre del rol del gym, que el gym puede elegir.)
+    if (payload.rol !== 'SUPERADMIN' || payload.sub !== 'superadmin' || payload.empresaId) {
+      res.status(403).json(err('Acceso denegado')); return;
+    }
     req.superadminId = payload.sub;
     next();
   } catch { res.status(401).json(err('Token inválido')); return; }
@@ -237,40 +254,93 @@ router.post('/impersonate/:empresaId', superauth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/v1/superadmin/facturacion — resumen de facturación por empresa
-router.get('/facturacion', superauth, async (req, res, next) => {
-  try {
-    const { mes, anio } = req.query;
-    const ahora  = new Date();
-    const inicio = new Date(Number(anio ?? ahora.getFullYear()), Number(mes ?? ahora.getMonth()) - 1, 1);
-    const fin    = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 0, 23, 59, 59);
+// ============================================================================
+// Cobro de SmartGym a los gimnasios: planes, cuadro de cobros y pagos
+// ============================================================================
 
-    const empresas = await prisma.empresa.findMany({
-      where: { activo: true },
-      select: {
-        id: true, nombre: true, nombreComercial: true,
-        ventas: {
-          where: { createdAt: { gte: inicio, lte: fin }, estado: 'COMPLETADA' },
-          select: { total: true },
-        },
-        _count: {
-          select: { personas: { where: { deletedAt: null } } },
-        },
-      },
-    });
+// Traduce los errores de negocio del servicio de cobros a status HTTP
+const conCobro = (fn: (req: any, res: any) => Promise<void>) => async (req: any, res: any, next: any) => {
+  try { await fn(req, res); }
+  catch (e: any) {
+    if (e instanceof CobroError) { res.status(e.status).json(err(e.message)); return; }
+    next(e);
+  }
+};
 
-    const resumen = empresas.map(e => ({
-      empresaId:       e.id,
-      nombre:          e.nombreComercial ?? e.nombre,
-      totalSocios:     e._count.personas,
-      ventasMes:       e.ventas.reduce((a, v) => a + Number(v.total), 0),
-      // Plan de cobro: ejemplo por cantidad de socios
-      planCobro:       e._count.personas <= 50 ? 'Básico' : e._count.personas <= 200 ? 'Pro' : 'Enterprise',
-      montoACobrar:    e._count.personas <= 50 ? 15000 : e._count.personas <= 200 ? 35000 : 80000,
-    }));
+// GET /api/v1/superadmin/planes-comerciales
+router.get('/planes-comerciales', superauth, conCobro(async (_req, res) => {
+  res.json(ok(await listarPlanes()));
+}));
 
-    res.json(ok(resumen));
-  } catch (e) { next(e); }
-});
+// POST /api/v1/superadmin/planes-comerciales
+router.post('/planes-comerciales', superauth, conCobro(async (req, res) => {
+  res.status(201).json(ok(await crearPlan(req.body ?? {}), 'Plan creado'));
+}));
+
+// PATCH /api/v1/superadmin/planes-comerciales/:id  (no se borran: se desactivan con activo=false)
+router.patch('/planes-comerciales/:id', superauth, conCobro(async (req, res) => {
+  res.json(ok(await editarPlan(req.params.id, req.body ?? {}), 'Plan actualizado'));
+}));
+
+// GET /api/v1/superadmin/cobros — plan, estado de pago, socios activos y uso de la semana por gimnasio
+router.get('/cobros', superauth, conCobro(async (_req, res) => {
+  res.json(ok(await cuadroCobros()));
+}));
+
+// PATCH /api/v1/superadmin/empresas/:id/cobro — plan, precio acordado, fin de prueba, notas
+router.patch('/empresas/:id/cobro', superauth, conCobro(async (req, res) => {
+  res.json(ok(await editarCobroEmpresa(req.params.id, req.body ?? {}), 'Plan del gimnasio actualizado'));
+}));
+
+// GET /api/v1/superadmin/empresas/:id/pagos — historial (incluye anulados)
+router.get('/empresas/:id/pagos', superauth, conCobro(async (req, res) => {
+  res.json(ok(await listarPagos(req.params.id)));
+}));
+
+// POST /api/v1/superadmin/empresas/:id/pagos — registrar un pago y correr "pagado hasta"
+router.post('/empresas/:id/pagos', superauth, conCobro(async (req, res) => {
+  res.status(201).json(ok(await registrarPago(req.params.id, req.body ?? {}), 'Pago registrado'));
+}));
+
+// PUT /api/v1/superadmin/pagos-suscripcion/:id/factura — multipart: tipo, puntoVenta, numero, fecha, cae?, caeVto?, pdf?
+router.put('/pagos-suscripcion/:id/factura', superauth, (req: any, res: any, next: any) => {
+  subirPdf(req, res, (e: any) => {
+    if (e?.code === 'LIMIT_FILE_SIZE') { res.status(400).json(err('El PDF pesa más de 5 MB')); return; }
+    if (e) { res.status(400).json(err('No se pudo leer el archivo')); return; }
+    next();
+  });
+}, conCobro(async (req, res) => {
+  const pdf = req.file ? { buffer: req.file.buffer as Buffer, nombre: String(req.file.originalname ?? '') } : undefined;
+  res.json(ok(await cargarFactura(req.params.id, req.body ?? {}, pdf), 'Factura cargada'));
+}));
+
+// GET /api/v1/superadmin/pagos-suscripcion/:id/factura.pdf
+router.get('/pagos-suscripcion/:id/factura.pdf', superauth, conCobro(async (req, res) => {
+  const { buffer, nombre } = await obtenerPdfFactura(req.params.id);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${nombre.replace(/[^\w.-]/g, '_')}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(buffer);
+}));
+
+// GET /api/v1/superadmin/config-cobro — datos de cobro de Cod&Tics (panel; lo vacío sale del .env)
+router.get('/config-cobro', superauth, conCobro(async (_req, res) => {
+  res.json(ok(await obtenerConfigCobro()));
+}));
+
+// PUT /api/v1/superadmin/config-cobro — guarda los datos de cobro (vacío = volver al .env)
+router.put('/config-cobro', superauth, conCobro(async (req, res) => {
+  res.json(ok(await guardarConfigCobro(req.body ?? {}), 'Datos de cobro guardados'));
+}));
+
+// POST /api/v1/superadmin/pagos-suscripcion/:id/enviar — recibo (y factura si está) por mail al gimnasio
+router.post('/pagos-suscripcion/:id/enviar', superauth, conCobro(async (req, res) => {
+  res.json(ok(await enviarComprobantePago(req.params.id), 'Mail enviado'));
+}));
+
+// POST /api/v1/superadmin/pagos-suscripcion/:id/anular — { motivo }
+router.post('/pagos-suscripcion/:id/anular', superauth, conCobro(async (req, res) => {
+  res.json(ok(await anularPago(req.params.id, req.body?.motivo), 'Pago anulado'));
+}));
 
 export default router;
